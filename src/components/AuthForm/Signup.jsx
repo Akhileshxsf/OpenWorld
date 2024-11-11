@@ -40,7 +40,7 @@ const Signup = () => {
        />
 
 <Input
-       placeholder='profession'
+       placeholder='profession&Ph.no(student 9985269125)'
        fontSize={14}
        type='text'
        size={"sm"}

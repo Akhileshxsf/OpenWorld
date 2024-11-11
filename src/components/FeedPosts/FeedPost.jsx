@@ -1,28 +1,16 @@
-import { Box ,Image } from '@chakra-ui/react';
-import PostFooter from "./PostFooter";
-import PostHeader from "./PostHeader";
+import { Box, Text, Image, Flex } from "@chakra-ui/react";
 
-
-const FeedPost = ({img,username,avatar,tagline}) => {
-  
-  
-
-  return(
-   <>
-      <PostHeader username={username} avatar={avatar} tagline={tagline}/>
-      <Box my={2}
-        borderRadius={4}
-         overflow={"hidden"}
-      >
-          <Image src={img} alt={username} />
-
-
-      </Box>
-        <PostFooter username={username} />
-
-    </>
+const FeedPost = ({ img, username, avatar, altText }) => {
+  return (
+    <Box mb={6}>
+      <Flex alignItems="center" gap={4}>
+        <Image src={avatar} alt="Avatar" boxSize="40px" borderRadius="full" />
+        <Text fontWeight="bold">{username}</Text>
+      </Flex>
+      <Image src={img} alt={altText} my={4} />
+      <Text>{altText}</Text>
+    </Box>
   );
-  
 };
 
 export default FeedPost;
