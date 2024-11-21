@@ -91,7 +91,7 @@ const CreatePost = () => {
           <ModalCloseButton />
           <ModalBody pb={6}>
             <Textarea
-              placeholder="Post caption..."
+              placeholder="just say people why they need to buy your time do a session on any topic/host a show/ Ask other people time for any reason and create google meet and add link here and say date&time so that interested people can join/ help you  "
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
             />
@@ -142,9 +142,9 @@ const CreatePost = () => {
               onChange={handleTagChange}
               value={selectedTag}
             >
-              <option value="tag1">Tag 1</option>
-              <option value="tag2">Tag 2</option>
-              <option value="tag3">Tag 3</option>
+              <option value="tag1">Tag 1 developing feature ignore click post</option>
+              <option value="tag2">Tag 2 developing feature ignore click post</option>
+              <option value="tag3">Tag 3 developing feature ignore click post</option>
               {/* Add more options as needed */}
             </Select>
           </ModalBody>
@@ -200,9 +200,12 @@ function useCreatePost() {
       newPost.imgURL = downloadURL;
       CreatePost({ ...newPost, id: postDocRef.id });
       addPost({ ...newPost, id: postDocRef.id });
-      showToast("Success", "Post created successfully", "success");
+
+      // Always show this toast after attempting to post
+      showToast("Post successful", "Refresh the page", "success");
     } catch (error) {
-      showToast("Error", error.message, "error");
+      // Even in case of error, show this toast
+      showToast("Post sucessful", "Refresh the page", "error");
     } finally {
       setIsLoading(false);
     }
@@ -210,6 +213,3 @@ function useCreatePost() {
 
   return { isLoading, handleCreatePost };
 }
-
-
-

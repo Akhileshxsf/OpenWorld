@@ -2,12 +2,14 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { firestore } from "../../firebase/firebase"; // Adjust path if needed
 import { Box, Text, Image, Flex, Button, Spinner, VStack, HStack } from "@chakra-ui/react";
+import { useNavigate } from "react-router-dom"; // For routing to user profile
 
 const FeedPosts = () => {
   const [posts, setPosts] = useState([]); // State for posts
   const [users, setUsers] = useState({}); // State for user profiles
   const [isLoading, setIsLoading] = useState(true); // Loading state
   const [error, setError] = useState(null); // Error state
+  const navigate = useNavigate(); // For navigating to the user profile page
 
   useEffect(() => {
     const fetchPostsAndUsers = async () => {
@@ -59,6 +61,10 @@ const FeedPosts = () => {
     fetchPostsAndUsers(); // Fetch posts and users on mount
   }, []);
 
+  const handleProfileClick = (username) => {
+    navigate(`/${username}`); // Navigate to the user's profile page
+  };
+
   if (isLoading) {
     return (
       <Flex justify="center" align="center" height="100vh">
@@ -102,11 +108,20 @@ const FeedPosts = () => {
                     borderRadius="full"
                     boxSize="60px"
                     objectFit="cover"
+                    cursor="pointer"
+                    onClick={() => handleProfileClick(userProfile.username)} // Navigate to profile on click
                   />
                 )}
                 <VStack align="start">
                   {userProfile.username && (
-                    <Text fontWeight="bold" color="white">{userProfile.username}</Text>
+                    <Text
+                      fontWeight="bold"
+                      color="white"
+                      cursor="pointer"
+                      onClick={() => handleProfileClick(userProfile.username)} // Navigate to profile on click
+                    >
+                      {userProfile.username}
+                    </Text>
                   )}
                   {userProfile.profession && (
                     <Text fontSize="sm" color="gray.400">
@@ -142,7 +157,7 @@ const FeedPosts = () => {
                   {post.likes ? `${post.likes} Likes` : "No likes yet"}
                 </Text>
 
-                <Button colorScheme="teal" size="sm" onClick={() => alert("Buying time for this post.")}>
+                <Button colorScheme="teal" size="sm" onClick={() => alert("Please join the meet link at the time mentioned by timeseller click on his profile to see his posts/ create your own post(tell about your startup idea/project) by clicking hand option in side bar and ask other people(our college studends senior junior) for any help they will join your meetlink and help for free  .")}>
                   Buy Time
                 </Button>
               </HStack>

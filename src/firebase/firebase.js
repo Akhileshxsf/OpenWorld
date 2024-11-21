@@ -1,11 +1,9 @@
-// firebase.js
-
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getAnalytics } from "firebase/analytics"; // Import Analytics
 
-// Firebase configuration using environment variables
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -16,12 +14,11 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase app
 const app = initializeApp(firebaseConfig);
 
-// Export necessary Firebase services
 const auth = getAuth(app);
 const firestore = getFirestore(app);
 const storage = getStorage(app);
+const analytics = getAnalytics(app); // Initialize Analytics
 
-export { app, auth, firestore, storage };
+export { app, auth, firestore, storage, analytics };
