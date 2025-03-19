@@ -1,18 +1,21 @@
 import { useState } from "react";
-import { firestore, storage, auth } from "../../firebase/firebase"; // Import auth
+import { firestore, storage, auth } from "../../firebase/firebase";
 import { collection, addDoc } from "firebase/firestore";
 import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
-import { Box, Button, Input, Textarea, Image, useToast } from "@chakra-ui/react";
-import { v4 as uuidv4 } from "uuid"; // To generate a unique filename for the image
+import { Box, Button, Input, Textarea, Image, useToast, Spinner } from "@chakra-ui/react";
+import { v4 as uuidv4 } from "uuid";
 
 const AddPost = () => {
-  const [caption, setCaption] = useState(""); // State for caption
-  const [image, setImage] = useState(null); // State for image file
-  const [loading, setLoading] = useState(false); // State for loading indicator
-  const toast = useToast(); // Chakra UI toast for notifications
+  const [caption, setCaption] = useState("");
+  const [image, setImage] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [buttonText, setButtonText] = useState("Add Post"); // New state for button text
+  const toast = useToast();
 
-  // Handle form submission (posting)
   const handleSubmit = async () => {
+    if (isSubmitted) return;
+
     if (!caption || !image) {
       toast({
         title: "Error",
@@ -24,9 +27,10 @@ const AddPost = () => {
       return;
     }
 
-    setLoading(true); // Start loading
+    setIsSubmitted(true);
+    setLoading(true);
+    setButtonText("Posting..."); // Change button text instantly
 
-    // Ensure the user is authenticated and get their UID
     const user = auth.currentUser;
     if (!user) {
       toast({
@@ -37,19 +41,19 @@ const AddPost = () => {
         isClosable: true,
       });
       setLoading(false);
+      setIsSubmitted(false);
+      setButtonText("Add Post"); // Revert button text
       return;
     }
 
-    // Create a unique filename for the image
     const imageName = `${uuidv4()}_${image.name}`;
     const imageRef = ref(storage, `posts/${imageName}`);
 
-    // Upload image to Firebase Storage
     const uploadTask = uploadBytesResumable(imageRef, image);
 
     uploadTask.on(
       "state_changed",
-      null, // Progress handling can be added here if needed
+      null,
       (error) => {
         toast({
           title: "Error",
@@ -58,21 +62,21 @@ const AddPost = () => {
           duration: 3000,
           isClosable: true,
         });
-        setLoading(false); // Stop loading on error
+        setLoading(false);
+        setIsSubmitted(false);
+        setButtonText("Add Post"); // Revert button text
       },
       async () => {
-        // Get the image URL once uploaded
         const imageUrl = await getDownloadURL(uploadTask.snapshot.ref);
 
-        // Add post to Firestore
         try {
           await addDoc(collection(firestore, "userPosts"), {
-            caption, // The caption text
-            img: imageUrl, // The uploaded image URL
-            userId: user.uid, // Use the authenticated user's UID
-            username: user.displayName || "Default Username", // Use actual username
-            profilePic: user.photoURL || "/defaultProfilePic.png", // Use user's profile pic if available
-            createdAt: new Date(), // Timestamp of post creation
+            caption,
+            img: imageUrl,
+            userId: user.uid,
+            username: user.displayName || "Default Username",
+            profilePic: user.photoURL || "/defaultProfilePic.png",
+            createdAt: new Date(),
           });
 
           toast({
@@ -82,8 +86,9 @@ const AddPost = () => {
             duration: 3000,
             isClosable: true,
           });
-          setCaption(""); // Clear caption
-          setImage(null); // Clear image preview
+
+          setCaption("");
+          setImage(null);
         } catch (error) {
           toast({
             title: "Error",
@@ -93,7 +98,11 @@ const AddPost = () => {
             isClosable: true,
           });
         } finally {
-          setLoading(false); // Stop loading
+          setLoading(false);
+          setIsSubmitted(false);
+          setTimeout(() => {
+            setButtonText("Add Post"); // Revert button text after 2 seconds
+          }, 2000);
         }
       }
     );
@@ -101,26 +110,23 @@ const AddPost = () => {
 
   return (
     <Box p={4} maxW="500px" mx="auto">
-      {/* Textarea for caption */}
       <Textarea
         placeholder="Write a caption..."
-        value={caption} // Bind Textarea to caption state
-        onChange={(e) => setCaption(e.target.value)} // Handle Textarea changes
+        value={caption}
+        onChange={(e) => setCaption(e.target.value)}
         mb={4}
         size="lg"
       />
 
-      {/* File input for image */}
       <Input
         type="file"
-        onChange={(e) => setImage(e.target.files[0])} // Handle file selection
+        onChange={(e) => setImage(e.target.files[0])}
         mb={4}
       />
 
-      {/* Display image preview if selected */}
       {image && (
         <Image
-          src={URL.createObjectURL(image)} // Display image preview
+          src={URL.createObjectURL(image)}
           alt="Post Image Preview"
           boxSize="200px"
           objectFit="cover"
@@ -128,15 +134,21 @@ const AddPost = () => {
         />
       )}
 
-      {/* Submit button */}
-      <Button
-        colorScheme="blue"
-        isLoading={loading} // Show loading state when posting
-        onClick={handleSubmit} // Handle post submission
-        isFullWidth
-      >
-        Add Post
-      </Button>
+      {loading ? (
+        <Spinner size="lg" />
+      ) : (
+        <Button
+          colorScheme="blue"
+          onClick={() => {
+            setLoading(true);
+            handleSubmit();
+          }}
+          isFullWidth
+          disabled={loading}
+        >
+          {buttonText} {/* Use the buttonText state */}
+        </Button>
+      )}
     </Box>
   );
 };

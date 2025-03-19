@@ -1,22 +1,63 @@
 import { useState, useEffect } from "react";
-import { firestore, auth } from "../../firebase/firebase"; // Import firestore and auth correctly
-import { collection, query, orderBy, getDocs, where, addDoc, doc, getDoc } from "firebase/firestore";
-import { Box, Grid, VStack, Skeleton, Image, Flex, IconButton, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody, Textarea, Button, Input } from "@chakra-ui/react";
+import {
+  firestore,
+  storage,
+  auth,
+} from "../../firebase/firebase";
+import {
+  collection,
+  query,
+  orderBy,
+  getDocs,
+  where,
+  addDoc,
+  doc,
+  getDoc,
+} from "firebase/firestore";
+import {
+  ref,
+  uploadBytesResumable,
+  getDownloadURL,
+} from "firebase/storage";
+import {
+  Box,
+  Grid,
+  VStack,
+  Skeleton,
+  Image,
+  Flex,
+  IconButton,
+  useDisclosure,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  Textarea,
+  Button,
+  Input,
+  useToast,
+  Text,
+  Avatar,
+  Progress,
+  Spinner,
+} from "@chakra-ui/react";
 import { FaPlus } from "react-icons/fa";
-import { useToast } from "@chakra-ui/react";
-import { useParams } from "react-router-dom"; // Import useParams for accessing the username from URL
-import ProfilePost from "./ProfilePost"; // Import the ProfilePost component
+import { useParams } from "react-router-dom";
 
 const ProfilePosts = () => {
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newPost, setNewPost] = useState({ caption: "", img: null });
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploading, setIsUploading] = useState(false);
   const [userData, setUserData] = useState({ username: "", profilePic: "" });
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
-  
+
   const user = auth.currentUser;
-  const { username } = useParams(); // Get the username from the URL parameter
+  const { username } = useParams();
 
   useEffect(() => {
     if (!user) {
@@ -32,45 +73,59 @@ const ProfilePosts = () => {
     }
 
     const fetchPosts = async () => {
-      setIsLoading(true); // Start loading
-
+      setIsLoading(true);
       try {
-        // Fetch user profile data based on user.uid
-        const userDocRef = doc(firestore, "users", user.uid); // Fetch user document by uid
+        const userDocRef = doc(firestore, "users", user.uid);
         const userDocSnapshot = await getDoc(userDocRef);
 
         if (userDocSnapshot.exists()) {
-          setUserData(userDocSnapshot.data()); // Set user profile data
+          setUserData(userDocSnapshot.data());
         } else {
-          console.log("No such user document!");
+          console.error("No user document found!");
+          toast({
+            title: "Error",
+            description: "User not found.",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+          });
+          return;
         }
 
-        // Query posts for the logged-in user based on username in URL
         const q = query(
           collection(firestore, "userPosts"),
-          where("username", "==", username), // Fetch posts by username in URL
+          where("username", "==", username),
           orderBy("createdAt", "desc")
         );
 
         const querySnapshot = await getDocs(q);
-        const fetchedPosts = querySnapshot.docs.map((doc) => doc.data());
-        console.log("Fetched posts:", fetchedPosts); // Debugging log
-        setPosts(fetchedPosts); // Set posts in state
+        const fetchedPosts = querySnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setPosts(fetchedPosts);
       } catch (error) {
-        console.error("Error fetching data:", error); // Log errors
+        console.error("Error fetching posts:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load posts. Please try again later.",
+          status: "error",
+          duration: 3000,
+          isClosable: true,
+        });
       } finally {
-        setIsLoading(false); // Stop loading
+        setIsLoading(false);
       }
     };
 
     fetchPosts();
-  }, [toast, user?.uid, username]); // Re-run when user or username changes
+  }, [username, user, toast]);
 
   const handleAddPost = async () => {
     if (!newPost.caption || !newPost.img) {
       toast({
         title: "Error",
-        description: "Please provide a caption and image for the post.",
+        description: "Please provide a caption and an image.",
         status: "error",
         duration: 3000,
         isClosable: true,
@@ -78,10 +133,12 @@ const ProfilePosts = () => {
       return;
     }
 
-    if (!user) {
+    // Validate file type and size
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
+    if (!allowedTypes.includes(newPost.img.type)) {
       toast({
         title: "Error",
-        description: "You must be logged in to post.",
+        description: "Only JPEG, PNG, and GIF images are allowed.",
         status: "error",
         duration: 3000,
         isClosable: true,
@@ -89,139 +146,203 @@ const ProfilePosts = () => {
       return;
     }
 
+    if (newPost.img.size > 5 * 1024 * 1024) { // 5MB limit
+      toast({
+        title: "Error",
+        description: "Image size must be less than 5MB.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+      return;
+    }
+
+    setIsUploading(true);
     try {
-      // Add new post to Firestore
-      const postRef = collection(firestore, "userPosts");
-      await addDoc(postRef, {
-        caption: newPost.caption,
-        img: newPost.img,
-        userId: user.uid, // Store the userId (uid) for reference
-        username: userData.username || "Default Username", // Use fetched username or default
-        profilePic: userData.profilePic || "/defaultProfilePic.png", // Use fetched profilePic or default
-        createdAt: new Date(),
-      });
+      const imageName = `${Date.now()}_${newPost.img.name}`;
+      const storageRef = ref(storage, `posts/${imageName}`);
+      const uploadTask = uploadBytesResumable(storageRef, newPost.img);
 
-      toast({
-        title: "Post added",
-        description: "Your post has been successfully added.",
-        status: "success",
-        duration: 3000,
-        isClosable: true,
-      });
+      uploadTask.on(
+        "state_changed",
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          setUploadProgress(progress);
+        },
+        (error) => {
+          console.error("Image upload error:", error);
+          toast({
+            title: "Error",
+            description: "Failed to upload image. Please try again.",
+            status: "error",
+            duration: 3000,
+            isClosable: true,
+          });
+          setIsUploading(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
 
-      // Add the new post to the current posts state to immediately reflect in UI
-      setPosts((prevPosts) => [
-        { caption: newPost.caption, img: newPost.img, username: userData.username, createdAt: new Date() },
-        ...prevPosts,
-      ]);
+          const postRef = collection(firestore, "userPosts");
+          await addDoc(postRef, {
+            caption: newPost.caption,
+            img: downloadURL,
+            userId: user.uid,
+            username: userData.username,
+            profilePic: userData.profilePic || "/defaultProfilePic.png",
+            createdAt: new Date(),
+          });
 
-      // Clear form and close modal
-      setNewPost({ caption: "", img: null });
-      onClose();
+          toast({
+            title: "Post Added",
+            description: "Your post has been successfully added.",
+            status: "success",
+            duration: 3000,
+            isClosable: true,
+          });
 
+          setPosts((prevPosts) => [
+            {
+              caption: newPost.caption,
+              img: downloadURL,
+              username: userData.username,
+              createdAt: new Date(),
+            },
+            ...prevPosts,
+          ]);
+          setNewPost({ caption: "", img: null });
+          setUploadProgress(0);
+          setIsUploading(false);
+          onClose();
+        }
+      );
     } catch (error) {
+      console.error("Error adding post:", error);
       toast({
         title: "Error",
-        description: "Failed to add the post. Please try again later.",
+        description: "Failed to add post. Please try again.",
         status: "error",
         duration: 3000,
         isClosable: true,
       });
-    } finally {
-      setIsLoading(false); // Ensure loading is set to false
+      setIsUploading(false);
     }
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const imageURL = URL.createObjectURL(file);
-      setNewPost((prevState) => ({ ...prevState, img: imageURL }));
+    if (e.target.files[0]) {
+      setNewPost((prev) => ({ ...prev, img: e.target.files[0] }));
     }
   };
 
   return (
     <>
-      <Grid templateColumns="repeat(auto-fill, minmax(250px, 1fr))" gap={6}>
+      <Grid templateColumns="repeat(auto-fill, minmax(300px, 1fr))" gap={6}>
         {isLoading ? (
-          <>
-            {[0, 1, 2, 3, 4, 5].map((_, idx) => (
-              <VStack key={idx} alignItems={"flex-start"} gap={4}>
-                <Skeleton w={"full"} height="300px" />
-              </VStack>
-            ))}
-          </>
+          [0, 1, 2, 3, 4, 5].map((_, idx) => (
+            <VStack key={idx} alignItems="flex-start" gap={4}>
+              <Skeleton w="full" height="300px" />
+            </VStack>
+          ))
+        ) : posts.length > 0 ? (
+          posts.map((post) => (
+            <Box
+              key={post.id}
+              bg="white"
+              boxShadow="md"
+              borderRadius="lg"
+              overflow="hidden"
+              _hover={{ transform: "scale(1.02)", transition: "transform 0.3s" }}
+            >
+              <Image
+                src={post.img}
+                alt="Post Image"
+                w="full"
+                h="300px"
+                objectFit="cover"
+              />
+              <Box p={4}>
+                <Text fontSize="sm" color="#000000">
+                  {post.caption}
+                </Text>
+              </Box>
+            </Box>
+          ))
         ) : (
-          <>
-            {/* Display existing posts for the logged-in user, filtered by username */}
-            {posts.length > 0 ? (
-              posts.map((post, idx) => (
-                <ProfilePost
-                  key={idx}
-                  img={post.img}
-                  caption={post.caption}
-                  username={post.username}
-                  createdAt={post.createdAt}
-                />
-              ))
-            ) : (
-              <Box>No posts available</Box>
-            )}
-
-            {/* "+" Button for adding new post */}
-            {user?.uid && ( // Only show the add post button if it's the logged-in user's profile
-              <Flex
-                alignItems="center"
-                justifyContent="center"
-                bg="gray.700"
-                color="white"
-                cursor="pointer"
-                border="1px solid whiteAlpha.300"
-                aspectRatio={1 / 1}
-                onClick={onOpen}
-              >
-                <IconButton
-                  icon={<FaPlus />}
-                  aria-label="Add Post"
-                  size="lg"
-                  bg="transparent"
-                  color="white"
-                  _hover={{ bg: "gray.600" }}
-                />
-              </Flex>
-            )}
-          </>
+          <Text>No posts available.</Text>
         )}
       </Grid>
 
-      {/* Modal for adding new post */}
-      <Modal isOpen={isOpen} onClose={onClose} isCentered>
+      {user?.uid && (
+        <Flex
+          position="fixed"
+          bottom="40px"
+          right="40px"
+          alignItems="center"
+          justifyContent="center"
+          bg="blue.600"
+          color="white"
+          cursor="pointer"
+          borderRadius="full"
+          boxSize="50px"
+          onClick={onOpen}
+          _hover={{ bg: "blue.500" }}
+        >
+          <IconButton
+            icon={<FaPlus />}
+            aria-label="Add Post"
+            size="lg"
+            bg="transparent"
+            color="white"
+            _hover={{ bg: "transparent" }}
+          />
+        </Flex>
+      )}
+
+      <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
-        <ModalContent>
+        <ModalContent borderRadius="lg">
           <ModalHeader>Add New Post</ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            <Flex flexDir="column" gap={4}>
+            <VStack spacing={4} align="stretch">
               <Textarea
                 placeholder="Write a caption..."
                 value={newPost.caption}
-                onChange={(e) => setNewPost({ ...newPost, caption: e.target.value })}
+                onChange={(e) =>
+                  setNewPost((prev) => ({ ...prev, caption: e.target.value }))
+                }
               />
-              <Input type="file" accept="image/*" onChange={handleFileChange} />
+              <Input
+                type="file"
+                accept="image/*"
+                onChange={handleFileChange}
+                borderColor="gray.300"
+              />
               {newPost.img && (
                 <Box mt={4}>
-                  <Image src={newPost.img} alt="New Post Preview" boxSize="200px" objectFit="cover" />
+                  <Image
+                    src={URL.createObjectURL(newPost.img)}
+                    alt="New Post Preview"
+                    boxSize="200px"
+                    objectFit="cover"
+                    borderRadius="md"
+                  />
                 </Box>
+              )}
+              {isUploading && (
+                <Progress value={uploadProgress} size="sm" colorScheme="blue" />
               )}
               <Button
                 colorScheme="blue"
                 onClick={handleAddPost}
-                isDisabled={!newPost.img || !newPost.caption}
+                isDisabled={!newPost.caption || !newPost.img || isUploading}
                 mt={4}
+                width="full"
               >
-                Upload Post
+                {isUploading ? <Spinner size="sm" /> : "Add Post"}
               </Button>
-            </Flex>
+            </VStack>
           </ModalBody>
         </ModalContent>
       </Modal>

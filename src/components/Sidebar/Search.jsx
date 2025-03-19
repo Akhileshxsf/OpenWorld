@@ -12,56 +12,60 @@ import {
   ModalHeader,
   ModalOverlay,
   Tooltip,
+  Text,
+  Avatar,
+  VStack,
   useDisclosure,
 } from "@chakra-ui/react";
-import { useRef } from "react";
-import useSearchUserByProfession from "../../hooks/useSearchUserByProfession";
-import useFetchAllUsers from "../../hooks/useFetchAllUsers"; // Import the all-users hook
-import SuggestedTimeSellers from "../SuggestedTimeSellers/SuggestedTimeSeller";
+import { useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import useFetchAllUsers from "../../hooks/useFetchAllUsers";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { firestore } from "../../firebase/firebase";
+import useShowToast from "../../hooks/useShowToast";
 
 const Search = () => {
   const { isOpen, onOpen, onClose } = useDisclosure();
   const searchRef = useRef(null);
+  const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState("");
+  const { filteredUsers, searchUsers, isLoading } = useFetchAllUsers();
+  const showToast = useShowToast();
 
-  // Hook to search user by profession
-  const { userProfile, isLoading: isSearching } = useSearchUserByProfession(
-    searchRef.current?.value
-  );
+  const getUserProfile = async (uid) => {
+    try {
+      const userQuery = query(collection(firestore, "users"), where("uid", "==", uid));
+      const querySnapshot = await getDocs(userQuery);
+      
+      if (querySnapshot.empty) {
+        showToast("Error", "User not found", "error");
+        return null;
+      }
+      
+      return querySnapshot.docs[0].data();
+    } catch (error) {
+      showToast("Error", error.message, "error");
+      return null;
+    }
+  };
 
-  // Hook to fetch all users
-  const {
-    allUsers,
-    isLoading: isAllUsersLoading,
-    fetchAllUsers,
-  } = useFetchAllUsers();
-
-  // Handle form submission for profession-based search
-  const handleSearchUser = (e) => {
+  const handleSearch = (e) => {
     e.preventDefault();
-    onClose(); // Close the modal
+    const searchValue = searchRef.current.value.trim();
+    setSearchQuery(searchValue);
+    searchUsers(searchValue);
   };
 
-  // Open modal and fetch all users when the "All Users" button is clicked
-  const handleFetchAllUsers = () => {
-    fetchAllUsers();
-    onOpen();
+  const navigateToProfile = async (uid) => {
+    const userProfile = await getUserProfile(uid);
+    if (userProfile) navigate(`/${userProfile.username}`);
   };
-
-  const commonIconSize = 25;
 
   return (
     <>
-      {/* Tooltip and Icon for opening the Search modal */}
-      <Tooltip
-        hasArrow
-        label={"Search TimeSellers"}
-        placement="right"
-        ml={1}
-        openDelay={500}
-        display={{ base: "block", md: "none" }}
-      >
+      <Tooltip label="Search OpenWorld" placement="right" openDelay={500}>
         <Flex
-          alignItems={"center"}
+          alignItems="center"
           gap={4}
           _hover={{ bg: "whiteAlpha.400" }}
           borderRadius={6}
@@ -70,74 +74,52 @@ const Search = () => {
           justifyContent={{ base: "center", md: "flex-start" }}
           onClick={onOpen}
         >
-          <img
-            src="/search.png"
-            alt="search"
-            style={{ width: commonIconSize, height: "auto" }}
-          />
+          <img src="/search.png" alt="search" style={{ width: 25 }} />
           <Box display={{ base: "none", md: "block" }}>Search</Box>
         </Flex>
       </Tooltip>
 
-      {/* Button to show all users */}
-      <Button onClick={handleFetchAllUsers} isLoading={isAllUsersLoading} mt={4}>
-        All Users
-      </Button>
-
-      {/* Modal for Search */}
-      <Modal isOpen={isOpen} onClose={onClose} motionPreset="slideInLeft" size="Xl">
+      <Modal isOpen={isOpen} onClose={onClose} motionPreset="slideInLeft" size="lg">
         <ModalOverlay />
-        <ModalContent bg={"black"} border={"1px solid gray"} maxW={"400px"}>
-          <ModalHeader>Search TimeSeller</ModalHeader>
+        <ModalContent bg="black" border="1px solid gray">
+          <ModalHeader>Search Users</ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
-            {/* Profession Search Form */}
-            <form onSubmit={handleSearchUser}>
+            <form onSubmit={handleSearch}>
               <FormControl>
-                <FormLabel>Profession</FormLabel>
-                <Input placeholder="Search TimeSellers" ref={searchRef} />
+                <FormLabel>Find TimeTraders</FormLabel>
+                <Input placeholder="Search by name or profession" ref={searchRef} />
               </FormControl>
-              <Flex w={"full"} justifyContent={"flex-end"}>
-                <Button
-                  type="submit"
-                  ml={"auto"}
-                  size={"sm"}
-                  my={4}
-                  isLoading={isSearching}
-                >
+              <Flex w="full" justifyContent="flex-end">
+                <Button type="submit" ml="auto" size="sm" my={4} isLoading={isLoading}>
                   Search
                 </Button>
               </Flex>
             </form>
 
-            {/* Display Profession-based Search Results */}
-            {userProfile && <SuggestedTimeSellers user={userProfile} />}
-            {userProfile && (
-              <Box mt={4}>
-                <strong>Username:</strong> {userProfile.username}
-                <br />
-                <strong>Profession:</strong> {userProfile.profession}
-              </Box>
-            )}
-
-            {/* Display All Users if Available */}
-            {allUsers.length > 0 && (
-              <Box mt={4}>
-                <strong>All Users:</strong>
-                {allUsers.map((user, index) => (
-                  <Box
-                    key={index}
-                    mt={2}
+            {filteredUsers.length > 0 && (
+              <VStack mt={4} align="stretch">
+                <Text fontWeight="bold">Results:</Text>
+                {filteredUsers.map((user) => (
+                  <Flex
+                    key={user.uid}
+                    align="center"
+                    gap={4}
                     p={2}
-                    border={"1px solid gray"}
-                    borderRadius={4}
+                    borderRadius={6}
+                    bg="gray.700"
+                    cursor="pointer"
+                    _hover={{ bg: "gray.600" }}
+                    onClick={() => navigateToProfile(user.uid)}
                   >
-                    <strong>Username:</strong> {user.username}
-                    <br />
-                    <strong>Profession:</strong> {user.profession}
-                  </Box>
+                    <Avatar size="md" src={user.profilePicURL || "/default-avatar.png"} name={user.username} />
+                    <Box>
+                      <Text fontWeight="bold">{user.username}</Text>
+                      <Text fontSize="sm" color="gray.400">{user.profession}</Text>
+                    </Box>
+                  </Flex>
                 ))}
-              </Box>
+              </VStack>
             )}
           </ModalBody>
         </ModalContent>

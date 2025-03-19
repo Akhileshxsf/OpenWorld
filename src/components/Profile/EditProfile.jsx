@@ -59,6 +59,7 @@ const EditProfile = ({ isOpen, onClose }) => {
       username: "",
       bio: "",
     });
+    setSelectedFile(null);
     onClose();
   };
 
@@ -115,9 +116,9 @@ const EditProfile = ({ isOpen, onClose }) => {
               </FormControl>
 
               <FormControl>
-                <FormLabel fontSize={"sm"}>Bio</FormLabel>
+                <FormLabel fontSize={"sm"}>About  (Add Links:-portfolio website/company website/googleform (if hiring))</FormLabel>
                 <Input
-                  placeholder={"Bio"}
+                  placeholder={"Just say what you do and add links "}
                   size={"sm"}
                   type={"text"}
                   value={inputs.bio}
