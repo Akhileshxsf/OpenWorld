@@ -1,9 +1,16 @@
-import { Avatar, AvatarGroup, Flex, VStack, Text, Button, useDisclosure, Spinner } from "@chakra-ui/react";
+import { Avatar, AvatarGroup, Flex, VStack, Text, Button, useDisclosure, Spinner, keyframes } from "@chakra-ui/react";
 import useUserProfileStore from "../../store/userProfileStore";
 import useAuthStore from "../../store/authStore";
 import EditProfile from "./EditProfile";
 import BuyTimeModal from "./BuyTimeModal";
 import { useNavigate } from 'react-router-dom';
+
+// Define the shine animation
+const shine = keyframes`
+  0% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+  50% { box-shadow: 0 0 15px rgba(255, 255, 255, 0.8); }
+  100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+`;
 
 const ProfileHeader = () => {
   const { userProfile } = useUserProfileStore();
@@ -66,6 +73,7 @@ const ProfileHeader = () => {
                 _hover={{ bg: "navy" }}
                 size={{ base: "xs", md: "sm" }}
                 onClick={editProfileDisclosure.onOpen}
+                animation={`${shine} 2s infinite`}  // Added shining effect
               >
                 Edit Profile
               </Button>

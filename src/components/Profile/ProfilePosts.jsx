@@ -42,9 +42,17 @@ import {
   Avatar,
   Progress,
   Spinner,
+  keyframes,
 } from "@chakra-ui/react";
 import { FaPlus } from "react-icons/fa";
 import { useParams } from "react-router-dom";
+
+// Define the shine animation
+const shine = keyframes`
+  0% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+  50% { box-shadow: 0 0 20px rgba(255, 255, 255, 1); }
+  100% { box-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+`;
 
 const ProfilePosts = () => {
   const [posts, setPosts] = useState([]);
@@ -276,8 +284,8 @@ const ProfilePosts = () => {
       {user?.uid && (
         <Flex
           position="fixed"
-          bottom="40px"
-          right="40px"
+          bottom="80px"  // Moved up from 40px
+          right="90px"
           alignItems="center"
           justifyContent="center"
           bg="blue.600"
@@ -285,7 +293,7 @@ const ProfilePosts = () => {
           cursor="pointer"
           borderRadius="full"
           boxSize="50px"
-          onClick={onOpen}
+          animation={`${shine} 2s infinite`}  // Added shining animation
           _hover={{ bg: "blue.500" }}
         >
           <IconButton
@@ -295,6 +303,7 @@ const ProfilePosts = () => {
             bg="transparent"
             color="white"
             _hover={{ bg: "transparent" }}
+            onClick={onOpen}
           />
         </Flex>
       )}

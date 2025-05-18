@@ -9,8 +9,8 @@ const Sidebaritems = () => {
     <>
         <Home />
         <Search />
-        <Notifications />
         <SellTime />
+        <Notifications />
         <ProfileLink />
         
     </>
