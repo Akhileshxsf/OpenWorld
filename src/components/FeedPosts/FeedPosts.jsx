@@ -17,6 +17,7 @@ import {
   ModalContent,
   ModalCloseButton,
   ModalBody,
+  ModalHeader,
   InputGroup,
   InputRightElement,
   IconButton,
@@ -42,6 +43,10 @@ const FeedPosts = ({ posts: initialPosts }) => {
   const [error, setError] = useState(null);
   const [selectedPostIndex, setSelectedPostIndex] = useState(null);
   const [newComment, setNewComment] = useState("");
+  const [modalPostId, setModalPostId] = useState(null);
+  const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false);
+  const [quoteText, setQuoteText] = useState("");
+  const [quotePostId, setQuotePostId] = useState(null);
 
   const toast = useToast();
   const navigate = useNavigate();
@@ -118,7 +123,7 @@ const FeedPosts = ({ posts: initialPosts }) => {
     } catch (error) {
       console.error("Error liking post:", error);
       toast({
-        title: "Error liking the post",
+        title: "Error upvoting the post",
         status: "error",
         duration: 2000,
       });
@@ -155,6 +160,7 @@ const FeedPosts = ({ posts: initialPosts }) => {
         profilePicURL: userData.profilePicURL,
         profession: userData.profession,
         timestamp: new Date().toISOString(),
+        isQuoteRequest: false,
       };
 
       const postRef = doc(firestore, "posts", posts[selectedPostIndex].id);
@@ -188,12 +194,79 @@ const FeedPosts = ({ posts: initialPosts }) => {
     }
   };
 
-  const handleBuyTime = () => {
-    toast({
-      title: "Comment and Trade Time",
-      status: "warning",
-      duration: 2000,
-    });
+  const handleRequestQuote = (postId) => {
+    setQuotePostId(postId);
+    setIsQuoteModalOpen(true);
+  };
+
+  const handleSubmitQuote = async () => {
+    if (!quoteText.trim() || !currentUserId || !quotePostId) return;
+
+    try {
+      const userDoc = await getDoc(doc(firestore, "users", currentUserId));
+      const userData = userDoc.data();
+
+      const quoteData = {
+        text: quoteText,
+        uid: currentUserId,
+        username: userData.username,
+        profilePicURL: userData.profilePicURL,
+        profession: userData.profession,
+        timestamp: new Date().toISOString(),
+        isQuoteRequest: true,
+      };
+
+      const postRef = doc(firestore, "posts", quotePostId);
+      await updateDoc(postRef, {
+        comments: arrayUnion(quoteData),
+      });
+
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === quotePostId
+            ? { ...post, comments: [...(post.comments || []), quoteData] }
+            : post
+        )
+      );
+      setQuoteText("");
+      setIsQuoteModalOpen(false);
+
+      toast({
+        title: "Quote request submitted!",
+        status: "success",
+        duration: 2000,
+        isClosable: true,
+      });
+    } catch (error) {
+      console.error("Error submitting quote request:", error);
+      toast({
+        title: "Failed to submit quote request",
+        status: "error",
+        duration: 2000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const handleBuyTime = (receiverId) => {
+    if (!currentUserId) {
+      toast({
+        title: "Please log in to chat",
+        status: "warning",
+        duration: 2000,
+      });
+      navigate("/auth");
+      return;
+    }
+    navigate(`/chat/${receiverId}`);
+  };
+
+  const openLikesModal = (postId) => {
+    setModalPostId(postId);
+  };
+
+  const closeLikesModal = () => {
+    setModalPostId(null);
   };
 
   // Animation variants
@@ -241,170 +314,244 @@ const FeedPosts = ({ posts: initialPosts }) => {
           No posts available.
         </Text>
       ) : (
-        posts.map((post, index) => {
-          const userProfile = users[post.createdBy] || { username: "Unknown User", profession: "N/A" };
-          const isLiked = post.likedBy?.includes(currentUserId);
+        posts
+          .filter((post) => post.likes <= 10) // Filter posts with 10 or fewer upvotes
+          .map((post, index) => {
+            const userProfile = users[post.createdBy] || { username: "Unknown User", profession: "N/A" };
+            const isLiked = post.likedBy?.includes(currentUserId);
 
-          return (
-            <MotionBox
-              key={post.id}
-              bg="#1A1A1A"
-              p={6}
-              borderRadius="xl"
-              mb={8}
-              shadow="lg"
-              border="1px solid"
-              borderColor="#1E90FF"
-              variants={cardVariants}
-              initial="hidden"
-              animate="visible"
-              _hover={{
-                borderColor: "#87CEEB",
-                boxShadow: "0 0 20px rgba(30, 144, 255, 0.5)",
-                transform: "translateY(-5px)",
-              }}
-              cursor="pointer"
-              onClick={() => openReelsModal(index)}
-            >
-              <HStack spacing={4} mb={4}>
-                <Avatar
-                  src={userProfile.profilePicURL}
-                  alt={`${userProfile.username} profile`}
-                  size="md"
-                  cursor="pointer"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    navigateToProfile(userProfile.username);
-                  }}
-                  border="2px solid"
-                  borderColor="#1E90FF"
-                  _hover={{ borderColor: "#87CEEB" }}
-                  transition="all 0.3s"
-                />
-                <VStack align="start" spacing={0}>
-                  <Text fontWeight="bold" color="white" fontSize="lg">
-                    {userProfile.username}
+            return (
+              <MotionBox
+                key={post.id}
+                bg="#1A1A1A"
+                p={6}
+                borderRadius="xl"
+                mb={8}
+                shadow="lg"
+                border="1px solid"
+                borderColor="#1E90FF"
+                variants={cardVariants}
+                initial="hidden"
+                animate="visible"
+                _hover={{
+                  borderColor: "#87CEEB",
+                  boxShadow: "0 0 20px rgba(30, 144, 255, 0.5)",
+                  transform: "translateY(-5px)",
+                }}
+                cursor="pointer"
+                onClick={() => openReelsModal(index)}
+              >
+                <HStack spacing={4} mb={4} justify="space-between">
+                  <HStack spacing={4}>
+                    <Avatar
+                      src={userProfile.profilePicURL}
+                      alt={`${userProfile.username} profile`}
+                      size="md"
+                      cursor="pointer"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigateToProfile(userProfile.username);
+                      }}
+                      border="2px solid"
+                      borderColor="#1E90FF"
+                      _hover={{ borderColor: "#87CEEB" }}
+                      transition="all 0.3s"
+                    />
+                    <VStack align="start" spacing={0}>
+                      <Text fontWeight="bold" color="white" fontSize="lg">
+                        {userProfile.username}
+                      </Text>
+                      <Text fontSize="sm" color="#87CEEB">
+                        {userProfile.profession}
+                      </Text>
+                    </VStack>
+                  </HStack>
+                  <MotionButton
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRequestQuote(post.id);
+                    }}
+                    bg="#1E90FF"
+                    color="white"
+                    borderRadius="full"
+                    _hover={{ bg: "#87CEEB" }}
+                    whileHover={{ scale: 1.1 }}
+                  >
+                    <VStack spacing={0}>
+                      <Text fontSize="sm">Get</Text>
+                      <Text fontSize="sm">Quote</Text>
+                    </VStack>
+                  </MotionButton>
+                </HStack>
+
+                {post.caption && (
+                  <Text color="white" fontSize="xl" fontWeight="semibold" mb={4}>
+                    {post.caption}
                   </Text>
-                  <Text fontSize="sm" color="#87CEEB">
-                    {userProfile.profession}
-                  </Text>
-                </VStack>
-              </HStack>
+                )}
 
-              {post.caption && (
-                <Text color="white" fontSize="xl" fontWeight="semibold" mb={4}>
-                  {post.caption}
-                </Text>
-              )}
-
-              {post.imageURL ? (
-                <Image
-                  src={post.imageURL}
-                  alt="Post image"
-                  borderRadius="lg"
-                  mb={4}
-                  maxH="400px"
-                  objectFit="cover"
-                  width="100%"
-                  boxShadow="0 0 15px rgba(30, 144, 255, 0.3)"
-                  transition="all 0.3s"
-                  _hover={{ filter: "brightness(1.1)" }}
-                />
-              ) : post.videoURL ? (
-                <Box mb={4} borderRadius="lg" overflow="hidden" boxShadow="0 0 15px rgba(30, 144, 255, 0.3)">
-                  <ReactPlayer
-                    url={post.videoURL}
-                    controls
+                {post.imageURL ? (
+                  <Image
+                    src={post.imageURL}
+                    alt="Post image"
+                    borderRadius="lg"
+                    mb={4}
+                    maxH="400px"
+                    objectFit="cover"
                     width="100%"
-                    height="400px"
-                    style={{ borderRadius: "lg" }}
+                    boxShadow="0 0 15px rgba(30, 144, 255, 0.3)"
+                    transition="all 0.3s"
+                    _hover={{ filter: "brightness(1.1)" }}
                   />
-                </Box>
-              ) : (
-                <Text color="#87CEEB" fontSize="lg" mb={4}>
-                  No media available.
-                </Text>
-              )}
-
-              <HStack justify="space-between" align="center" mb={4}>
-                <MotionButton
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleLike(post.id);
-                  }}
-                  variant="ghost"
-                  color="#1E90FF"
-                  leftIcon={isLiked ? <AiFillLike /> : <AiOutlineLike />}
-                  _hover={{ bg: "#1E90FF", color: "white" }}
-                  size="sm"
-                  whileHover={{ scale: 1.1 }}
-                >
-                  {post.likes ? `${post.likes} Likes` : "Like"}
-                </MotionButton>
-
-                <MotionButton
-                  variant="ghost"
-                  color="#1E90FF"
-                  leftIcon={<AiOutlineComment />}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openReelsModal(index);
-                  }}
-                  _hover={{ bg: "#1E90FF", color: "white" }}
-                  size="sm"
-                  whileHover={{ scale: 1.1 }}
-                >
-                  Comments
-                </MotionButton>
-              </HStack>
-
-              {post.likedBy?.length > 0 && (
-                <Box mt={2} mb={4}>
-                  <Text fontSize="sm" color="#87CEEB">
-                    Liked by:
+                ) : post.videoURL ? (
+                  <Box mb={4} borderRadius="lg" overflow="hidden" boxShadow="0 0 15px rgba(30, 144, 255, 0.3)">
+                    <ReactPlayer
+                      url={post.videoURL}
+                      controls
+                      width="100%"
+                      height="400px"
+                      style={{ borderRadius: "lg" }}
+                    />
+                  </Box>
+                ) : (
+                  <Text color="#87CEEB" fontSize="lg" mb={4}>
+                    No media available.
                   </Text>
-                  <HStack spacing={2} mt={1}>
-                    {post.likedBy.map((uid) => (
-                      <Tooltip key={uid} label={users[uid]?.username || "Unknown User"} bg="#1E90FF" color="white">
-                        <Avatar
-                          src={users[uid]?.profilePicURL}
+                )}
+
+                <HStack justify="space-between" align="center" mb={4}>
+                  <MotionButton
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLike(post.id);
+                    }}
+                    variant="ghost"
+                    color="#1E90FF"
+                    leftIcon={isLiked ? <AiFillLike /> : <AiOutlineLike />}
+                    _hover={{ bg: "#1E90FF", color: "white" }}
+                    size="sm"
+                    whileHover={{ scale: 1.1 }}
+                  >
+                    {post.likes ? `${post.likes} Upvotes` : "Upvote"}
+                  </MotionButton>
+
+                  <MotionButton
+                    variant="ghost"
+                    color="#1E90FF"
+                    leftIcon={<AiOutlineComment />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openReelsModal(index);
+                    }}
+                    _hover={{ bg: "#1E90FF", color: "white" }}
+                    size="sm"
+                    whileHover={{ scale: 1.1 }}
+                  >
+                    Comments
+                  </MotionButton>
+                </HStack>
+
+                {post.likedBy?.length > 0 && (
+                  <Box mt={2} mb={4}>
+                    <Text fontSize="sm" color="#87CEEB">
+                      Upvoted by:
+                    </Text>
+                    <HStack spacing={2} mt={1}>
+                      {post.likedBy.slice(0, 5).map((uid) => (
+                        <Tooltip key={uid} label={users[uid]?.username || "Unknown User"} bg="#1E90FF" color="white">
+                          <Avatar
+                            src={users[uid]?.profilePicURL}
+                            size="xs"
+                            cursor="pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigateToProfile(users[uid]?.username);
+                            }}
+                            border="1px solid"
+                            borderColor="#1E90FF"
+                            _hover={{ borderColor: "#87CEEB" }}
+                          />
+                        </Tooltip>
+                      ))}
+                      {post.likedBy.length > 5 && (
+                        <MotionButton
                           size="xs"
-                          cursor="pointer"
+                          variant="ghost"
+                          color="#1E90FF"
+                          _hover={{ bg: "#1E90FF", color: "white" }}
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigateToProfile(users[uid]?.username);
+                            openLikesModal(post.id);
                           }}
-                          border="1px solid"
-                          borderColor="#1E90FF"
-                          _hover={{ borderColor: "#87CEEB" }}
-                        />
-                      </Tooltip>
-                    ))}
-                  </HStack>
-                </Box>
-              )}
+                          whileHover={{ scale: 1.1 }}
+                        >
+                          More
+                        </MotionButton>
+                      )}
+                    </HStack>
+                  </Box>
+                )}
 
-              <HStack mt={4} justify="flex-end" align="center">
-                <MotionButton
-                  size="sm"
-                  onClick={() => handleBuyTime()}
-                  bg="#1E90FF"
-                  color="white"
-                  boxShadow="0 0 15px rgba(30, 144, 255, 0.5)"
-                  _hover={{ bg: "#87CEEB", boxShadow: "0 0 20px rgba(135, 206, 235, 0.7)" }}
-                  _active={{ bg: "#1E90FF" }}
-                  borderRadius="full"
-                  variants={pulseVariants}
-                  animate="pulse"
-                >
-                  Buy Time
-                </MotionButton>
-              </HStack>
-            </MotionBox>
-          );
-        })
+                <HStack mt={4} justify="flex-end" align="center">
+                  <MotionButton
+                    size="sm"
+                    onClick={() => handleBuyTime(post.createdBy)}
+                    bg="#1E90FF"
+                    color="white"
+                    boxShadow="0 0 15px rgba(30, 144, 255, 0.5)"
+                    _hover={{ bg: "#87CEEB", boxShadow: "0 0 20px rgba(135, 206, 235, 0.7)" }}
+                    _active={{ bg: "#1E90FF" }}
+                    borderRadius="full"
+                    variants={pulseVariants}
+                    animate="pulse"
+                  >
+                    contact
+                  </MotionButton>
+                </HStack>
+              </MotionBox>
+            );
+          })
       )}
 
+      {/* Quote Request Modal */}
+      <Modal isOpen={isQuoteModalOpen} onClose={() => setIsQuoteModalOpen(false)} size="md">
+        <ModalOverlay bg="#000000" />
+        <ModalContent bg="#1A1A1A" borderRadius="xl" border="1px solid" borderColor="#1E90FF">
+          <ModalHeader color="white" fontSize="xl" fontWeight="bold">
+            Request a Quote
+          </ModalHeader>
+          <ModalCloseButton color="white" bg="#1E90FF" borderRadius="full" _hover={{ bg: "#87CEEB" }} />
+          <ModalBody pb={6}>
+            <VStack spacing={4}>
+              <Input
+                placeholder="Enter your quote request..."
+                value={quoteText}
+                onChange={(e) => setQuoteText(e.target.value)}
+                bg="#2A2A2A"
+                color="white"
+                border="1px solid"
+                borderColor="#1E90FF"
+                borderRadius="lg"
+                _focus={{ borderColor: "#87CEEB", boxShadow: "0 0 10px rgba(30, 144, 255, 0.5)" }}
+              />
+              <MotionButton
+                onClick={handleSubmitQuote}
+                bg="#1E90FF"
+                color="white"
+                borderRadius="full"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                isDisabled={!quoteText.trim()}
+              >
+                Submit Quote Request
+              </MotionButton>
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+
+      {/* Reels Modal */}
       {selectedPostIndex !== null && (
         <Modal
           isOpen={selectedPostIndex !== null}
@@ -569,11 +716,11 @@ const FeedPosts = ({ posts: initialPosts }) => {
                       posts[selectedPostIndex].comments.map((comment, idx) => (
                         <MotionBox
                           key={idx}
-                          bg="#2A2A2A"
+                          bg={comment.isQuoteRequest ? "#2A2A2A" : "#2A2A2A"}
                           p={3}
                           borderRadius="lg"
                           border="1px solid"
-                          borderColor="#1E90FF"
+                          borderColor={comment.isQuoteRequest ? "#FFD700" : "#1E90FF"}
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: idx * 0.1, duration: 0.5 }}
@@ -586,14 +733,14 @@ const FeedPosts = ({ posts: initialPosts }) => {
                               cursor="pointer"
                               onClick={() => navigateToProfile(comment.username)}
                               border="2px solid"
-                              borderColor="#1E90FF"
+                              borderColor={comment.isQuoteRequest ? "#FFD700" : "#1E90FF"}
                             />
                             <VStack align="start" spacing={0}>
                               <Text fontWeight="bold" color="white" fontSize="md">
                                 {comment.username}
                               </Text>
                               <Text fontSize="xs" color="#87CEEB">
-                                {comment.profession}
+                                {comment.isQuoteRequest ? "Quote Request" : comment.profession}
                               </Text>
                             </VStack>
                           </HStack>
@@ -604,7 +751,7 @@ const FeedPosts = ({ posts: initialPosts }) => {
                       ))
                     ) : (
                       <Text color="#87CEEB" fontSize="md">
-                        No comments yet.
+                        No comments or quote requests yet.
                       </Text>
                     )}
                   </VStack>
@@ -640,6 +787,59 @@ const FeedPosts = ({ posts: initialPosts }) => {
                   </InputGroup>
                 </MotionBox>
               </Flex>
+            </ModalBody>
+          </ModalContent>
+        </Modal>
+      )}
+
+      {/* Likes Modal */}
+      {modalPostId && (
+        <Modal isOpen={modalPostId !== null} onClose={closeLikesModal} size="md">
+          <ModalOverlay bg="#000000" />
+          <ModalContent bg="#1A1A1A" borderRadius="xl" border="1px solid" borderColor="#1E90FF">
+            <ModalHeader color="white" fontSize="xl" fontWeight="bold">
+              Upvoted by
+            </ModalHeader>
+            <ModalCloseButton color="white" bg="#1E90FF" borderRadius="white" _hover={{ bg: "#87CEEB" }} />
+            <ModalBody pb={6}>
+              <VStack align="stretch" maxH="60vh" overflowY="auto" spacing={3}>
+                {posts
+                  .find((post) => post.id === modalPostId)
+                  ?.likedBy.map((uid, idx) => (
+                    <MotionBox
+                      key={uid}
+                      bg="#2A1A2A"
+                      p={3}
+                      borderRadius="1g"
+                      border="1px solid"
+                      borderColor="#1E90FF"
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.1, duration: 0.5 }}
+                    >
+                      <HStack align="center" spacing={3}>
+                        <Avatar
+                          src={users[uid]?.profilePicURL}
+                          alt={`${users[uid]?.username || "Unknown User"} profile`}
+                          size="sm"
+                          cursor="pointer"
+                          onClick={() => navigateToProfile(users[uid]?.username)}
+                          border="2px solid"
+                          borderColor="#1E90FF"
+                          _hover={{ borderColor: "#87CEEB" }}
+                        />
+                        <VStack align="start" spacing={0}>
+                          <Text fontWeight="bold" color="white" fontSize="md">
+                            {users[uid]?.username || "Unknown User"}
+                          </Text>
+                          <Text fontSize="xs" color="#87CEEB">
+                            {users[uid]?.profession || "N/A"}
+                          </Text>
+                        </VStack>
+                      </HStack>
+                    </MotionBox>
+                  ))}
+              </VStack>
             </ModalBody>
           </ModalContent>
         </Modal>

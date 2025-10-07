@@ -5,717 +5,1207 @@ import {
   VStack,
   Text,
   Button,
-  Heading,
   Avatar,
-  Modal,
-  ModalOverlay,
-  ModalContent,
-  ModalHeader,
-  ModalFooter,
-  ModalBody,
-  ModalCloseButton,
-  Textarea,
-  useDisclosure,
-  List,
-  ListItem,
-  Link,
   Spinner,
+  Badge,
+  HStack,
+  useToast,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  IconButton,
+  Tooltip,
+  Alert,
+  AlertIcon,
+  AlertTitle,
+  AlertDescription,
+  useBreakpointValue,
 } from "@chakra-ui/react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   collection,
-  doc as firestoreDoc,
-  getDoc,
+  doc,
+  onSnapshot,
+  updateDoc,
+  setDoc,
   query,
   where,
-  onSnapshot,
-  setDoc,
-  updateDoc,
-  arrayUnion,
+  orderBy,
+  deleteDoc,
 } from "firebase/firestore";
 import { firestore, auth } from "../../firebase/firebase";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { useNavigate } from "react-router-dom";
-import useShowToast from "../../hooks/useShowToast";
+import { createGroq } from '@ai-sdk/groq';
+import { generateText } from 'ai';
+import { 
+  FiSend, 
+  FiUserPlus, 
+  FiRefreshCw, 
+  FiX, 
+  FiMessageCircle,
+  FiTrendingUp,
+  FiUsers,
+  FiCheck,
+  FiClock
+} from "react-icons/fi";
 
-// Constants
-const COLLECTIONS = {
-  NOTIFICATIONS: "notifications",
-  USERS: "users",
-  USER_STATUS: "userStatus",
-};
-const NOTIFICATION_TYPE = "notification";
-const MAX_CACHED_USERS = 50; // Limit user cache size
+const groqClient = createGroq({
+  apiKey: import.meta.env.VITE_GROQ_API_KEY,
+});
 
-// Motion components
 const MotionBox = motion(Box);
-const MotionButton = motion(Button);
 
-// Utility to handle errors consistently
-const handleError = (showToast, message, error, context) => {
-  console.error(`${context}:`, error);
-  showToast("Error", `${message}: ${error.message}`, "error");
-};
+// Custom hook for tracking notification updates
+const useNotificationUpdates = () => {
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
+  const [lastChecked, setLastChecked] = useState(null);
+  const [authUser] = useAuthState(auth);
 
-// Default user data
-const defaultUserData = {
-  username: "Unknown User",
-  email: "No email",
-  profilePicURL: "",
-  fullName: "",
-  profession: "",
-  bio: "",
-  createdAt: 0,
-  posts: [],
-  Rating: [],
-  SoldInstances: [],
-  link: "",
-  uid: "",
+  // Load last checked timestamp from localStorage
+  useEffect(() => {
+    if (authUser) {
+      const saved = localStorage.getItem(`notifications_last_visited_${authUser.uid}`);
+      if (saved) {
+        setLastChecked(new Date(saved));
+      } else {
+        const now = new Date();
+        setLastChecked(now);
+        localStorage.setItem(`notifications_last_visited_${authUser.uid}`, now.toISOString());
+      }
+    }
+  }, [authUser]);
+
+  // Update last checked timestamp
+  const updateLastChecked = useCallback(() => {
+    if (authUser) {
+      const now = new Date();
+      setLastChecked(now);
+      localStorage.setItem(`notifications_last_visited_${authUser.uid}`, now.toISOString());
+      setHasNewUpdates(false);
+    }
+  }, [authUser]);
+
+  // Check for new updates
+  const checkForNewUpdates = useCallback((newItems) => {
+    if (!lastChecked || !authUser) return false;
+    
+    const hasNew = newItems.some(item => {
+      const itemTime = item.timestamp?.toDate?.() || new Date();
+      return itemTime > lastChecked;
+    });
+    
+    if (hasNew) {
+      setHasNewUpdates(true);
+    }
+    
+    return hasNew;
+  }, [lastChecked, authUser]);
+
+  return {
+    hasNewUpdates,
+    lastChecked,
+    updateLastChecked,
+    checkForNewUpdates,
+    setHasNewUpdates
+  };
 };
 
 const NotificationsPage = () => {
-  const [notifications, setNotifications] = useState([]);
-  const [userCache, setUserCache] = useState({});
+  const [connectionRequests, setConnectionRequests] = useState([]);
+  const [aiSuggestions, setAiSuggestions] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [userProfile, setUserProfile] = useState(null);
   const [authUser, loading] = useAuthState(auth);
-  const [message, setMessage] = useState("");
-  const [selectedSenderData, setSelectedSenderData] = useState(null);
-  const [selectedReaders, setSelectedReaders] = useState([]);
   const [isFetching, setIsFetching] = useState(false);
+  const [isAiAnalyzing, setIsAiAnalyzing] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
+  const [sentRequests, setSentRequests] = useState([]);
+  const [connections, setConnections] = useState([]);
   const navigate = useNavigate();
-  const showToast = useShowToast();
-  const { isOpen, onOpen, onClose } = useDisclosure(); // Notification modal
-  const { isOpen: isSenderOpen, onOpen: onSenderOpen, onClose: onSenderClose } = useDisclosure(); // Sender data modal
-  const { isOpen: isReadersOpen, onOpen: onReadersOpen, onClose: onReadersClose } = useDisclosure(); // Readers modal
+  const toast = useToast();
 
-  // Navigate to user profile
-  const navigateToProfile = useCallback((username) => {
-    if (username && username !== "Unknown User") {
-      navigate(`/${username}`);
+  // Notification updates tracking
+  const {
+    hasNewUpdates,
+    updateLastChecked,
+    checkForNewUpdates,
+    setHasNewUpdates
+  } = useNotificationUpdates();
+
+  // Responsive values
+  const containerPadding = useBreakpointValue({ base: 2, md: 4 });
+  const avatarSize = useBreakpointValue({ base: "sm", md: "md" });
+  const tabFontSize = useBreakpointValue({ base: "xs", md: "sm" });
+  const tabPx = useBreakpointValue({ base: 2, md: 4 });
+
+  // Enhanced color scheme - black and blue theme
+  const colors = {
+    primary: {
+      50: "#E6F3FF",
+      100: "#B3D9FF",
+      200: "#80C0FF",
+      300: "#4DA6FF",
+      400: "#1A8DFF",
+      500: "#0074E8", // Main blue
+      600: "#005CB5",
+      700: "#004382",
+      800: "#002B50",
+      900: "#00141F",
+    },
+    accent: {
+      500: "#00B4D8", // Cyan accent for highlights
+      600: "#0096C7",
+    },
+    gradient: {
+      primary: "linear-gradient(135deg, #0074E8 0%, #00B4D8 100%)",
+      hover: "linear-gradient(135deg, #005CB5 0%, #0096C7 100%)",
+    },
+    bg: "black", // Background black
+    text: "white",
+    secondaryText: "gray.400",
+    cardBg: "rgba(255, 255, 255, 0.05)",
+    border: "whiteAlpha.200",
+  };
+
+  // Update last visited when component mounts and on tab change
+  useEffect(() => {
+    if (authUser) {
+      updateLastChecked();
     }
-  }, [navigate]);
+  }, [authUser, activeTab, updateLastChecked]);
 
-  // Fetch user data with caching
-  const fetchUserData = useCallback(async (userId) => {
-    if (!userId || userId === "unknown") return defaultUserData;
-    if (userCache[userId]) return userCache[userId];
+  // Fetch user profile and all users
+  useEffect(() => {
+    if (!authUser) return;
 
-    try {
-      const userDocRef = firestoreDoc(firestore, COLLECTIONS.USERS, userId);
-      const userDoc = await getDoc(userDocRef);
-      const userData = userDoc.exists()
-        ? {
-            ...defaultUserData,
-            username: userDoc.data().username || "Unknown User",
-            email: userDoc.data().email || "No email",
-            profilePicURL: userDoc.data().profilePicURL || "",
-            fullName: userDoc.data().fullName || "",
-            profession: userDoc.data().profession || "",
-            bio: userDoc.data().bio || "",
-            createdAt: userDoc.data().createdAt || 0,
-            posts: userDoc.data().posts || [],
-            Rating: userDoc.data().Rating || [],
-            SoldInstances: userDoc.data().SoldInstances || [],
-            link: userDoc.data().link || "",
-            uid: userId,
-          }
-        : defaultUserData;
+    const userRef = doc(firestore, "users", authUser.uid);
+    const unsubscribeUser = onSnapshot(userRef, (doc) => {
+      if (doc.exists()) {
+        setUserProfile(doc.data());
+      }
+    });
 
-      setUserCache((prev) => {
-        const newCache = { ...prev, [userId]: userData };
-        if (Object.keys(newCache).length > MAX_CACHED_USERS) {
-          const keys = Object.keys(newCache);
-          delete newCache[keys[0]]; // Remove oldest entry
-        }
-        return newCache;
-      });
-      return userData;
-    } catch (error) {
-      handleError(showToast, "Failed to fetch user data", error, `fetchUserData(${userId})`);
-      return defaultUserData;
-    }
-  }, [userCache, showToast]);
+    const usersRef = collection(firestore, "users");
+    const unsubscribeUsers = onSnapshot(usersRef, (snapshot) => {
+      const usersData = snapshot.docs
+        .map((doc) => ({ id: doc.id, ...doc.data() }))
+        .filter(user => user.id !== authUser.uid);
+      setAllUsers(usersData);
+    });
 
-  // Create notification
-  const createNotification = useCallback(async () => {
-    if (!authUser) {
-      showToast("Error", "You must be logged in to create a notification", "error");
-      return;
-    }
-    if (!message.trim()) {
-      showToast("Error", "Please enter a message", "error");
-      return;
-    }
+    return () => {
+      unsubscribeUser();
+      unsubscribeUsers();
+    };
+  }, [authUser]);
 
-    try {
-      const timestamp = Date.now();
-      const notificationId = `notification-${timestamp}`;
-      const notificationRef = firestoreDoc(firestore, COLLECTIONS.NOTIFICATIONS, notificationId);
-      const { username } = await fetchUserData(authUser.uid);
-      await setDoc(notificationRef, {
-        senderId: authUser.uid,
-        type: NOTIFICATION_TYPE,
-        message: `${username}: ${message}`,
-        timestamp: new Date(),
-        readBy: [],
-      });
-      showToast("Success", "Notification created successfully", "success", {
-        position: "top",
-        duration: 3000,
-        zIndex: 9999,
-      });
-      setTimeout(() => {
-        onClose();
-        setMessage("");
-      }, 500);
-    } catch (error) {
-      handleError(showToast, "Failed to create notification", error, "createNotification");
-    }
-  }, [authUser, message, fetchUserData, showToast, onClose]);
-
-  // Fetch notifications (real-time)
+  // Enhanced connection requests fetching with update tracking
   useEffect(() => {
     if (!authUser || loading) return;
 
     setIsFetching(true);
-    const notificationsRef = collection(firestore, COLLECTIONS.NOTIFICATIONS);
-    const q = query(notificationsRef, where("type", "==", NOTIFICATION_TYPE));
+    const offersRef = collection(firestore, "offers");
 
-    const unsubscribe = onSnapshot(
-      q,
-      async (snapshot) => {
-        try {
-          const userNotifications = await Promise.all(
-            snapshot.docs.map(async (notificationDoc) => {
-              const data = notificationDoc.data();
-              const { username, profilePicURL } = await fetchUserData(data.senderId || "unknown");
-
-              try {
-                const userStatusRef = firestoreDoc(
-                  firestore,
-                  `${COLLECTIONS.NOTIFICATIONS}/${notificationDoc.id}/${COLLECTIONS.USER_STATUS}`,
-                  authUser.uid
-                );
-                const userStatusDoc = await getDoc(userStatusRef);
-                const read = userStatusDoc.exists() ? userStatusDoc.data().read : false;
-
-                return {
-                  id: notificationDoc.id,
-                  type: data.type || NOTIFICATION_TYPE,
-                  message: data.message || "No content",
-                  username,
-                  profilePicURL,
-                  timestamp: data.timestamp?.toDate?.() || new Date(),
-                  read,
-                  readBy: data.readBy || [],
-                  senderId: data.senderId || "unknown",
-                };
-              } catch (error) {
-                console.warn(`Failed to fetch read status for ${notificationDoc.id}:`, error);
-                return {
-                  id: notificationDoc.id,
-                  type: data.type || NOTIFICATION_TYPE,
-                  message: data.message || "No content",
-                  username,
-                  profilePicURL,
-                  timestamp: data.timestamp?.toDate?.() || new Date(),
-                  read: false,
-                  readBy: data.readBy || [],
-                  senderId: data.senderId || "unknown",
-                };
-              }
-            })
-          );
-
-          setNotifications(userNotifications.sort((a, b) => b.timestamp - a.timestamp));
-        } catch (error) {
-          handleError(showToast, "Failed to process notifications", error, "onSnapshot");
-        } finally {
-          setIsFetching(false);
-        }
-      },
-      (error) => {
-        handleError(showToast, "Failed to listen for notifications", error, "onSnapshot listener");
-        setIsFetching(false);
-      }
+    // Incoming requests
+    const incomingQuery = query(
+      offersRef,
+      where("type", "==", "connection_request"),
+      where("toUserId", "==", authUser.uid),
+      where("status", "==", "pending"),
+      orderBy("timestamp", "desc")
     );
 
-    return () => unsubscribe();
-  }, [authUser, loading, fetchUserData, showToast]);
+    // Sent requests
+    const sentQuery = query(
+      offersRef,
+      where("type", "==", "connection_request"),
+      where("fromUserId", "==", authUser.uid),
+      where("status", "==", "pending"),
+      orderBy("timestamp", "desc")
+    );
 
-  // Mark notification as read
-  const markAsRead = useCallback(async (id, senderId) => {
-    if (!id || !authUser) return;
+    // Connections (both directions)
+    const connectionsQueryTo = query(
+      offersRef,
+      where("type", "==", "connection_request"),
+      where("status", "==", "connected"),
+      where("toUserId", "==", authUser.uid),
+      orderBy("connectedAt", "desc")
+    );
 
+    const connectionsQueryFrom = query(
+      offersRef,
+      where("type", "==", "connection_request"),
+      where("status", "==", "connected"),
+      where("fromUserId", "==", authUser.uid),
+      orderBy("connectedAt", "desc")
+    );
+
+    const unsubscribeIncoming = onSnapshot(incomingQuery, (snapshot) => {
+      const requests = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setConnectionRequests(requests);
+      
+      // Check for new updates
+      if (requests.length > 0) {
+        checkForNewUpdates(requests);
+      }
+    });
+
+    const unsubscribeSent = onSnapshot(sentQuery, (snapshot) => {
+      const sent = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setSentRequests(sent);
+    });
+
+    let connTo = [];
+    let connFrom = [];
+    const unsubscribeConnectionsTo = onSnapshot(connectionsQueryTo, (snapshot) => {
+      connTo = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setConnections([...connTo, ...connFrom]);
+    });
+
+    const unsubscribeConnectionsFrom = onSnapshot(connectionsQueryFrom, (snapshot) => {
+      connFrom = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setConnections([...connTo, ...connFrom]);
+    });
+
+    setIsFetching(false);
+
+    return () => {
+      unsubscribeIncoming();
+      unsubscribeSent();
+      unsubscribeConnectionsTo();
+      unsubscribeConnectionsFrom();
+    };
+  }, [authUser, loading, checkForNewUpdates]);
+
+  // Enhanced AI Analysis with better matching
+  const runAiAnalysis = useCallback(async () => {
+    if (!authUser || !userProfile || allUsers.length === 0) return;
+
+    setIsAiAnalyzing(true);
     try {
-      const notificationRef = firestoreDoc(firestore, COLLECTIONS.NOTIFICATIONS, id);
-      const userStatusRef = firestoreDoc(
-        firestore,
-        `${COLLECTIONS.NOTIFICATIONS}/${id}/${COLLECTIONS.USER_STATUS}`,
-        authUser.uid
-      );
-      const senderData = await fetchUserData(senderId);
+      // Filter users who aren't already connected or requested
+      const existingConnections = [...connectionRequests, ...sentRequests, ...connections];
+      const existingUserIds = new Set(existingConnections.map(conn => 
+        conn.fromUserId === authUser.uid ? conn.toUserId : conn.fromUserId
+      ));
 
-      await setDoc(userStatusRef, { read: true, readAt: new Date() });
-      await updateDoc(notificationRef, { readBy: arrayUnion(authUser.uid) });
+      const availableUsers = allUsers
+        .filter(user => !existingUserIds.has(user.id))
+        .slice(0, 25);
 
-      setNotifications((prev) =>
-        prev
-          .map((notif) =>
-            notif.id === id
-              ? { ...notif, read: true, readBy: [...notif.readBy, authUser.uid] }
-              : notif
-          )
-          .sort((a, b) => b.timestamp - a.timestamp)
-      );
+      if (availableUsers.length === 0) {
+        setAiSuggestions([]);
+        setIsAiAnalyzing(false);
+        return;
+      }
 
-      setSelectedSenderData(senderData);
-      onSenderOpen();
+      const systemPrompt = `
+        You are an advanced AI matchmaking assistant. Analyze the user's profile and available users to suggest the best potential connections.
+
+        Return ONLY a valid JSON array with up to 6 user objects. No additional text or explanation.
+
+        Required JSON format:
+        [
+          {
+            "username": "exact_username_from_list",
+            "reason": "Compelling reason for match (2-3 sentences highlighting specific compatibility)",
+            "matchType": "professional/collaboration/interest/skill/complementary",
+            "compatibilityScore": 85,
+            "sharedInterests": ["interest1", "interest2"],
+            "sharedSkills": ["skill1", "skill2"]
+          },
+          ...more
+        ]
+
+        User Profile:
+        - Username: ${userProfile.username || "User"}
+        - Profession: ${userProfile.profession || "Not specified"}
+        - Skills: ${userProfile.skills?.join(', ') || "No skills listed"}
+        - Bio: ${userProfile.bio || "No bio available"}
+        - Interests: ${userProfile.interests?.join(', ') || "No interests listed"}
+        - Experience: ${userProfile.experience || "Not specified"}
+
+        Available Users (filtered):
+        ${availableUsers.map(user => 
+          `- ${user.username || "Unknown"} | Profession: ${user.profession || "None"} | 
+           Skills: ${user.skills?.join(', ') || "None"} | 
+           Interests: ${user.interests?.join(', ') || "None"} | 
+           Bio: ${user.bio?.substring(0, 100) || "No bio"}`
+        ).join('\n')}
+
+        Scoring Criteria:
+        1. Professional alignment (30%)
+        2. Shared interests (25%)
+        3. Skill compatibility (20%)
+        4. Bio/content synergy (15%)
+        5. Complementary strengths (10%)
+
+        Return ONLY the JSON array, nothing else.
+      `;
+
+      const { text } = await generateText({
+        model: groqClient('llama-3.3-70b-versatile'),
+        system: systemPrompt,
+        prompt: "Return ONLY a JSON array with user suggestions based on the analysis."
+      });
+
+      console.log("AI Raw Response:", text);
+
+      // Enhanced response cleaning
+      let cleanedText = text.trim();
+      cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+      const jsonStart = cleanedText.indexOf('[');
+      const jsonEnd = cleanedText.lastIndexOf(']') + 1;
+      
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        cleanedText = cleanedText.substring(jsonStart, jsonEnd);
+      }
+
+      try {
+        const suggestions = JSON.parse(cleanedText);
+        
+        // Enhanced matching with fallback data
+        const matchedSuggestions = suggestions
+          .map(suggestion => {
+            if (!suggestion.username) return null;
+            
+            const matchedUser = availableUsers.find(user => 
+              user.username?.toLowerCase() === suggestion.username?.toLowerCase()
+            );
+            
+            if (!matchedUser) return null;
+
+            // Calculate enhanced compatibility score
+            let calculatedScore = suggestion.compatibilityScore || 50;
+            
+            // Boost score for strong matches
+            if (suggestion.sharedInterests?.length > 2) calculatedScore += 10;
+            if (suggestion.sharedSkills?.length > 1) calculatedScore += 10;
+            if (suggestion.matchType === 'professional') calculatedScore += 5;
+
+            calculatedScore = Math.min(calculatedScore, 95);
+
+            return {
+              ...matchedUser,
+              ...suggestion,
+              compatibilityScore: calculatedScore,
+              isAiSuggestion: true,
+              timestamp: new Date()
+            };
+          })
+          .filter(Boolean)
+          .sort((a, b) => b.compatibilityScore - a.compatibilityScore)
+          .slice(0, 6);
+
+        setAiSuggestions(matchedSuggestions);
+        
+      } catch (parseError) {
+        console.error("Error parsing AI suggestions:", parseError);
+        // Enhanced fallback logic
+        const fallbackSuggestions = allUsers
+          .map(user => {
+            let compatibilityScore = 50;
+            let reason = "Potential connection opportunity";
+            let matchType = "general";
+            const sharedInterests = [];
+            const sharedSkills = [];
+
+            // Calculate compatibility
+            if (userProfile.interests && user.interests) {
+              sharedInterests.push(...user.interests.filter(interest => 
+                userProfile.interests.includes(interest)
+              ));
+            }
+
+            if (userProfile.skills && user.skills) {
+              sharedSkills.push(...user.skills.filter(skill => 
+                userProfile.skills.includes(skill)
+              ));
+            }
+
+            // Score calculation
+            if (user.profession === userProfile.profession) {
+              compatibilityScore += 25;
+              reason = `Same profession: ${user.profession}`;
+              matchType = "professional";
+            }
+
+            if (sharedInterests.length > 0) {
+              compatibilityScore += sharedInterests.length * 5;
+              reason = `Shared interests: ${sharedInterests.join(', ')}`;
+              matchType = "interest";
+            }
+
+            if (sharedSkills.length > 0) {
+              compatibilityScore += sharedSkills.length * 3;
+              reason = `Shared skills: ${sharedSkills.join(', ')}`;
+              matchType = "skill";
+            }
+
+            compatibilityScore = Math.min(compatibilityScore, 90);
+
+            return {
+              ...user,
+              isAiSuggestion: true,
+              reason,
+              matchType,
+              compatibilityScore,
+              sharedInterests,
+              sharedSkills,
+              timestamp: new Date()
+            };
+          })
+          .sort((a, b) => b.compatibilityScore - a.compatibilityScore)
+          .slice(0, 5);
+
+        setAiSuggestions(fallbackSuggestions);
+      }
+
     } catch (error) {
-      handleError(showToast, "Failed to mark notification as read", error, "markAsRead");
+      console.error("AI Analysis Error:", error);
+      toast({
+        title: "AI Analysis Failed",
+        description: "Using fallback suggestions",
+        status: "warning",
+        duration: 3000,
+      });
+      
+      const randomSuggestions = allUsers
+        .sort(() => 0.5 - Math.random())
+        .slice(0, 4)
+        .map(user => ({
+          ...user,
+          isAiSuggestion: true,
+          reason: "AI-suggested connection opportunity",
+          matchType: "random",
+          compatibilityScore: Math.floor(Math.random() * 30) + 50,
+          timestamp: new Date()
+        }));
+      
+      setAiSuggestions(randomSuggestions);
+    } finally {
+      setIsAiAnalyzing(false);
     }
-  }, [authUser, fetchUserData, showToast, onSenderOpen]);
+  }, [authUser, userProfile, allUsers, connectionRequests, sentRequests, connections, toast]);
 
-  // Show readers in modal
-  const showReaders = useCallback(async (readBy) => {
-    if (!readBy || readBy.length === 0) {
-      setSelectedReaders([]);
-      onReadersOpen();
+  // Enhanced connection request handling
+  const handleAcceptConnection = async (connection) => {
+    try {
+      const offerRef = doc(firestore, "offers", connection.id);
+      
+      const chatRoomId = `chat_${connection.id}`;
+      await updateDoc(offerRef, {
+        toUserAccepted: true,
+        status: "connected",
+        connectedAt: new Date(),
+        lastUpdated: new Date(),
+        chatRoomId: chatRoomId
+      });
+
+      toast({
+        title: "Connection Accepted!",
+        description: `You are now connected with ${connection.fromUserName}`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+
+      // Update last checked to clear new updates indicator
+      updateLastChecked();
+
+      setTimeout(() => {
+        navigate(`/messages`);
+      }, 1000);
+
+    } catch (error) {
+      console.error("Error accepting connection:", error);
+      toast({
+        title: "Error",
+        description: "Failed to accept connection. Please try again.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // Enhanced connection request sending
+  const sendConnectionRequest = async (targetUser, customMessage = null) => {
+    if (!userProfile || !targetUser.id) {
+      toast({
+        title: "Error",
+        description: "Cannot send connection request. Missing user data.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
       return;
     }
 
     try {
-      const readersData = await Promise.all(
-        readBy.map(async (userId) => (await fetchUserData(userId)).username)
-      );
-      setSelectedReaders(readersData);
-      onReadersOpen();
+      const offerId = `connection_${Date.now()}_${authUser.uid}_${targetUser.id}`;
+      const offerRef = doc(firestore, "offers", offerId);
+      
+      const connectionData = {
+        type: "connection_request",
+        fromUserId: authUser.uid,
+        fromUserName: userProfile.username || "Unknown User",
+        fromUserProfession: userProfile.profession || "",
+        fromUserBio: userProfile.bio || "",
+        fromUserProfilePic: userProfile.profilePicURL || "",
+        fromUserSkills: userProfile.skills || [],
+        fromUserInterests: userProfile.interests || [],
+        
+        toUserId: targetUser.id,
+        toUserName: targetUser.username || "Unknown User",
+        toUserProfession: targetUser.profession || "",
+        toUserBio: targetUser.bio || "",
+        toUserProfilePic: targetUser.profilePicURL || "",
+        toUserSkills: targetUser.skills || [],
+        toUserInterests: targetUser.interests || [],
+        
+        userNeed: customMessage || `Interested in connecting about ${targetUser.profession || 'potential collaboration'}`,
+        status: "pending",
+        timestamp: new Date(),
+        lastUpdated: new Date(),
+        fromUserAccepted: true,
+        toUserAccepted: false,
+        chatRoomId: null,
+        batchSize: 1,
+        isAiSuggested: targetUser.isAiSuggested || false,
+
+        name: `Connection: ${targetUser.username || 'User'}`,
+        description: customMessage || `Interested in connecting with ${targetUser.username}`,
+        contact: userProfile.email || "",
+        offerType: "Connection",
+        joins: [],
+        userId: authUser.uid
+      };
+
+      await setDoc(offerRef, connectionData);
+
+      toast({
+        title: "Connection Request Sent!",
+        description: `Request sent to ${targetUser.username}`,
+        status: "success",
+        duration: 3000,
+        isClosable: true,
+      });
+
+      // Update last checked to clear new updates indicator
+      updateLastChecked();
+
+      // Remove from suggestions if it was an AI suggestion
+      if (targetUser.isAiSuggested) {
+        setAiSuggestions(prev => 
+          prev.filter(suggestion => suggestion.id !== targetUser.id)
+        );
+      }
+
     } catch (error) {
-      handleError(showToast, "Failed to fetch readers", error, "showReaders");
+      console.error("Error sending connection request:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send connection request. Please try again.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
     }
-  }, [fetchUserData, showToast, onReadersOpen]);
-
-  // Animation variants
-  const notificationVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: { opacity: 1, y: 0, transition: { duration: 0.5 } },
   };
 
-  const plusButtonVariants = {
-    idle: { scale: 1, boxShadow: "0 0 10px rgba(30, 144, 255, 0.5)" },
-    hover: { scale: 1.2, boxShadow: "0 0 20px rgba(30, 144, 255, 0.8)" },
-    tap: { scale: 0.9 },
-    pulse: {
-      scale: [1, 1.1, 1],
-      boxShadow: [
-        "0 0 10px rgba(30, 144, 255, 0.5)",
-        "0 0 20px rgba(30, 144, 255, 0.8)",
-        "0 0 10px rgba(30, 144, 255, 0.5)",
-      ],
-      transition: { repeat: Infinity, duration: 1.5 },
+  // Decline connection request
+  const handleDeclineConnection = async (connectionId) => {
+    try {
+      await deleteDoc(doc(firestore, "offers", connectionId));
+      
+      toast({
+        title: "Request Declined",
+        status: "info",
+        duration: 2000,
+        isClosable: true,
+      });
+
+      // Update last checked to clear new updates indicator
+      updateLastChecked();
+
+    } catch (error) {
+      console.error("Error declining connection:", error);
+      toast({
+        title: "Error",
+        description: "Failed to decline request. Please try again.",
+        status: "error",
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  };
+
+  // View user profile
+  const navigateToProfile = (username) => {
+    if (username) navigate(`/${username}`);
+  };
+
+  // Enhanced match type colors
+  const getMatchTypeColor = (matchType) => {
+    switch (matchType) {
+      case 'professional': return 'blue';
+      case 'collaboration': return 'teal';
+      case 'interest': return 'green';
+      case 'skill': return 'orange';
+      case 'complementary': return 'cyan';
+      default: return 'gray';
+    }
+  };
+
+  // Get compatibility color
+  const getCompatibilityColor = (score) => {
+    if (score >= 80) return 'green';
+    if (score >= 60) return 'blue';
+    if (score >= 40) return 'yellow';
+    return 'red';
+  };
+
+  // Mobile-optimized Connection Request Item
+  const ConnectionRequestItem = ({ connection }) => (
+    <MotionBox
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      bg={colors.cardBg}
+      backdropFilter="blur(8px)"
+      borderRadius="xl"
+      p={4}
+      boxShadow="0 4px 20px rgba(0, 0, 0, 0.3)"
+      _hover={{ transform: "translateY(-2px)", transition: "0.3s" }}
+    >
+      <Flex direction="column" gap={3}>
+        <Flex align="center" gap={3}>
+          <Avatar
+            size={avatarSize}
+            src={connection.fromUserProfilePic}
+            name={connection.fromUserName}
+            cursor="pointer"
+            onClick={() => navigateToProfile(connection.fromUserName)}
+          />
+          <Box flex={1}>
+            <Text
+              fontWeight="bold"
+              color={colors.text}
+              fontSize="md"
+              cursor="pointer"
+              onClick={() => navigateToProfile(connection.fromUserName)}
+            >
+              {connection.fromUserName}
+            </Text>
+            <Text fontSize="sm" color={colors.secondaryText} mt={1}>
+              {connection.fromUserProfession}
+            </Text>
+            <Text fontSize="sm" color="gray.300" mt={1} noOfLines={3}>
+              {connection.userNeed}
+            </Text>
+          </Box>
+        </Flex>
+        <HStack justify="space-between" flexWrap="wrap" gap={2}>
+          <HStack spacing={1} flexWrap="wrap">
+            <Badge colorScheme={connection.isAiSuggested ? "blue" : "gray"} fontSize="xs">
+              {connection.isAiSuggested ? "AI" : "Direct"}
+            </Badge>
+          </HStack>
+          <HStack spacing={2}>
+            <IconButton
+              icon={<FiX />}
+              colorScheme="red"
+              variant="ghost"
+              size="md"
+              onClick={() => handleDeclineConnection(connection.id)}
+              aria-label="Decline connection"
+            />
+            <Button
+              size="md"
+              bg={colors.gradient.primary}
+              color={colors.text}
+              _hover={{ bg: colors.gradient.hover }}
+              onClick={() => handleAcceptConnection(connection)}
+              leftIcon={<FiUserPlus />}
+              minW="100px"
+            >
+              Accept
+            </Button>
+          </HStack>
+        </HStack>
+      </Flex>
+    </MotionBox>
+  );
+
+  // Mobile-optimized AI Suggestion Item
+  const AISuggestionItem = ({ suggestion, index }) => (
+    <MotionBox
+      key={suggestion.id || index}
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ duration: 0.5, delay: index * 0.1 }}
+      bg="rgba(0, 116, 232, 0.1)"
+      backdropFilter="blur(8px)"
+      borderRadius="xl"
+      p={4}
+      border="1px solid"
+      borderColor={colors.primary[500]}
+      boxShadow="0 4px 20px rgba(0, 116, 232, 0.2)"
+      _hover={{ transform: "translateY(-2px)", transition: "0.3s" }}
+    >
+      <Flex direction="column" gap={3}>
+        <Flex align="flex-start" gap={3}>
+          <Avatar
+            size={avatarSize}
+            src={suggestion.profilePicURL}
+            name={suggestion.username || "User"}
+            cursor="pointer"
+            onClick={() => navigateToProfile(suggestion.username)}
+          />
+          <Box flex={1}>
+            <VStack align="start" spacing={1} mb={2}>
+              <Text fontWeight="bold" color={colors.text} fontSize="md">
+                {suggestion.username || "Unknown User"}
+              </Text>
+              <HStack spacing={2} flexWrap="wrap">
+                <Badge colorScheme={getMatchTypeColor(suggestion.matchType)} fontSize="xs">
+                  {suggestion.matchType}
+                </Badge>
+                <Badge colorScheme={getCompatibilityColor(suggestion.compatibilityScore)} fontSize="xs">
+                  {suggestion.compatibilityScore}%
+                </Badge>
+              </HStack>
+            </VStack>
+            <Text fontSize="sm" color={colors.secondaryText}>
+              {suggestion.profession || "No profession"}
+            </Text>
+            <Text fontSize="sm" color={colors.primary[300]} mt={1} noOfLines={3}>
+              {suggestion.reason}
+            </Text>
+          </Box>
+        </Flex>
+        <Flex justify="space-between" align="center" flexWrap="wrap" gap={2}>
+          {(suggestion.sharedInterests?.length > 0 || suggestion.sharedSkills?.length > 0) && (
+            <HStack spacing={2} flexWrap="wrap" flex={1}>
+              {suggestion.sharedInterests?.slice(0, 2).map((interest, i) => (
+                <Badge key={i} colorScheme="green" fontSize="xs">
+                  {interest}
+                </Badge>
+              ))}
+              {suggestion.sharedSkills?.slice(0, 2).map((skill, i) => (
+                <Badge key={i} colorScheme="blue" fontSize="xs">
+                  {skill}
+                </Badge>
+              ))}
+            </HStack>
+          )}
+          <Button
+            size="md"
+            bg={colors.gradient.primary}
+            color={colors.text}
+            _hover={{ bg: colors.gradient.hover }}
+            onClick={() => sendConnectionRequest(suggestion)}
+            isDisabled={!suggestion.id}
+            leftIcon={<FiSend />}
+            minW="100px"
+          >
+            Connect
+          </Button>
+        </Flex>
+      </Flex>
+    </MotionBox>
+  );
+
+  // Sent Request Item
+  const SentRequestItem = ({ request }) => (
+    <MotionBox
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      bg={colors.cardBg}
+      borderRadius="xl"
+      p={4}
+      boxShadow="0 4px 20px rgba(0, 0, 0, 0.3)"
+      _hover={{ transform: "translateY(-2px)", transition: "0.3s" }}
+    >
+      <Flex direction="column" gap={2}>
+        <Flex align="center" gap={3}>
+          <Avatar
+            size={avatarSize}
+            src={request.toUserProfilePic}
+            name={request.toUserName}
+          />
+          <Box flex={1}>
+            <Text fontWeight="bold" color={colors.text} fontSize="md">
+              {request.toUserName}
+            </Text>
+            <Text fontSize="sm" color={colors.secondaryText}>
+              {request.toUserProfession}
+            </Text>
+          </Box>
+        </Flex>
+        <Flex justify="space-between" align="center">
+          <Text fontSize="sm" color="gray.500">
+            Sent {request.timestamp?.toDate?.()?.toLocaleDateString()}
+          </Text>
+          <HStack spacing={2}>
+            <Badge 
+              colorScheme="yellow"
+              fontSize="xs"
+            >
+              Pending
+            </Badge>
+            <IconButton
+              icon={<FiX />}
+              colorScheme="red"
+              variant="ghost"
+              size="md"
+              onClick={() => handleDeclineConnection(request.id)}
+              aria-label="Cancel request"
+            />
+          </HStack>
+        </Flex>
+      </Flex>
+    </MotionBox>
+  );
+
+  // Connection Item - normalize other user
+  const ConnectionItem = ({ connection }) => {
+    const isFromMe = connection.fromUserId === authUser.uid;
+    const otherUser = isFromMe ? {
+      name: connection.toUserName,
+      profession: connection.toUserProfession,
+      profilePic: connection.toUserProfilePic,
+      username: connection.toUserName
+    } : {
+      name: connection.fromUserName,
+      profession: connection.fromUserProfession,
+      profilePic: connection.fromUserProfilePic,
+      username: connection.fromUserName
+    };
+
+    return (
+      <MotionBox
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        bg={colors.cardBg}
+        borderRadius="xl"
+        p={4}
+        boxShadow="0 4px 20px rgba(0, 0, 0, 0.3)"
+        _hover={{ transform: "translateY(-2px)", transition: "0.3s" }}
+      >
+        <Flex direction="column" gap={2}>
+          <Flex align="center" gap={3}>
+            <Avatar
+              size={avatarSize}
+              src={otherUser.profilePic}
+              name={otherUser.name}
+            />
+            <Box flex={1}>
+              <Text fontWeight="bold" color={colors.text} fontSize="md" cursor="pointer" onClick={() => navigateToProfile(otherUser.username)}>
+                {otherUser.name}
+              </Text>
+              <Text fontSize="sm" color={colors.secondaryText}>
+                {otherUser.profession}
+              </Text>
+            </Box>
+          </Flex>
+          <Flex justify="space-between" align="center">
+            <Text fontSize="sm" color="gray.500">
+              Connected {connection.connectedAt?.toDate?.()?.toLocaleDateString()}
+            </Text>
+            <Button
+              size="sm"
+              variant="outline"
+              colorScheme="blue"
+              leftIcon={<FiMessageCircle size={14} />}
+              onClick={() => connection.chatRoomId && navigate(`/messages`)}
+            >
+              Message
+            </Button>
+          </Flex>
+        </Flex>
+      </MotionBox>
+    );
+  };
+
+  // Mobile-optimized tabs configuration
+  const tabData = [
+    { 
+      key: 'requests', 
+      label: 'Requests', 
+      icon: FiUserPlus, 
+      count: connectionRequests.length,
+      color: 'red'
     },
-  };
-
-  const modalVariants = {
-    hidden: { opacity: 0, scale: 0.8 },
-    visible: { opacity: 1, scale: 1, transition: { duration: 0.3 } },
-  };
-
-  // Unread notifications count
-  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
+    { 
+      key: 'suggestions', 
+      label: 'AI', 
+      icon: FiTrendingUp, 
+      count: aiSuggestions.length,
+      color: 'green'
+    },
+    { 
+      key: 'sent', 
+      label: 'Sent', 
+      icon: FiSend, 
+      count: sentRequests.length,
+      color: 'blue'
+    },
+    { 
+      key: 'connections', 
+      label: 'Connections', 
+      icon: FiCheck, 
+      count: connections.length,
+      color: 'green'
+    },
+  ];
 
   if (loading) {
     return (
       <Flex justify="center" align="center" minH="50vh">
-        <Spinner size="xl" color="cyan.300" />
+        <Spinner size="xl" color={colors.primary[400]} />
       </Flex>
     );
   }
 
   if (!authUser) {
     return (
-      <Text color="white" textAlign="center" fontSize={{ base: "lg", md: "xl" }}>
-        Please log in to view notifications.
-      </Text>
+      <Alert status="warning" borderRadius="lg" bg="orange.50">
+        <AlertIcon />
+        <AlertTitle>Authentication Required</AlertTitle>
+        <AlertDescription>
+          Please log in to view notifications and connections.
+        </AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <Container maxW={{ base: "100%", md: "container.lg" }} py={{ base: 4, md: 8 }} px={{ base: 3, md: 4 }}>
-      <MotionBox initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.6 }}>
-        <Flex
-          justify="space-between"
-          align="center"
-          mb={{ base: 4, md: 6 }}
-          direction="row"
-          gap={{ base: 2, md: 4 }}
+    <Container 
+      maxW="container.lg" 
+      py={0}
+      px={containerPadding} 
+      overflow="hidden" 
+      bg={colors.bg} 
+      color={colors.text}
+      minH="100vh"
+    >
+      <MotionBox 
+        initial={{ opacity: 0 }} 
+        animate={{ opacity: 1 }} 
+        transition={{ duration: 0.6 }}
+        pt={0}
+      >
+        <Tabs 
+          colorScheme="blue" 
+          variant="soft-rounded" 
+          index={activeTab} 
+          onChange={setActiveTab}
+          isFitted
         >
-          <Heading
-            fontSize={{ base: "2xl", md: "4xl" }}
-            fontWeight="extrabold"
-            color="white"
-            textAlign="left"
-            textShadow="0 2px 4px rgba(0, 0, 0, 0.3)"
+          {/* Fixed header */}
+          <Box 
+            position="sticky" 
+            top="0" 
+            zIndex="1000" 
+            bg={colors.bg} 
+            pb={2} 
+            pt={0}
           >
-            Notifications
-          </Heading>
-          <MotionButton
-            size="lg"
-            bg="linear-gradient(45deg, #1E90FF, #00CED1)"
-            color="white"
-            _hover={{ bg: "linear-gradient(45deg, #00CED1, #87CEEB)" }}
-            variants={plusButtonVariants}
-            initial="idle"
-            animate="pulse"
-            whileHover="hover"
-            whileTap="tap"
-            onClick={onOpen}
-            borderRadius="full"
-            w={{ base: "48px", md: "56px" }}
-            h={{ base: "48px", md: "56px" }}
-            fontSize={{ base: "2xl", md: "3xl" }}
-            boxShadow="0 0 15px rgba(30, 144, 255, 0.6)"
-            aria-label="Create new notification"
-            zIndex={10}
-          >
-            +
-          </MotionButton>
-        </Flex>
-
-        {isFetching ? (
-          <VStack spacing={4} align="stretch">
-            {[...Array(3)].map((_, i) => (
-              <Box
-                key={i}
-                bg="gray.800"
-                borderRadius="lg"
-                p={4}
-                animate={{ opacity: [0.5, 1, 0.5] }}
-                transition={{ duration: 1, repeat: Infinity }}
+            <Flex justify="space-between" align="center" mb={2}>
+              <Text 
+                fontSize={{ base: "xl", md: "2xl" }} 
+                fontWeight="bold" 
+                color={colors.primary[300]}
               >
-                <Flex align="center" gap={3}>
-                  <Avatar size="md" />
-                  <Box flex="1">
-                    <Box bg="gray.700" h="16px" w="60%" borderRadius="md" mb={2} />
-                    <Box bg="gray.700" h="12px" w="40%" borderRadius="md" />
-                  </Box>
-                </Flex>
-              </Box>
-            ))}
-          </VStack>
-        ) : notifications.length === 0 ? (
-          <Text fontSize={{ base: "md", md: "lg" }} color="gray.400" textAlign="center" mt={{ base: 8, md: 12 }}>
-            No notifications yet.
-          </Text>
-        ) : (
-          <VStack spacing={{ base: 3, md: 4 }} align="stretch">
-            {notifications.map((notification) => (
-              <MotionBox
-                key={notification.id}
-                variants={notificationVariants}
-                initial="hidden"
-                animate="visible"
-                bg={notification.read ? "rgba(255, 255, 255, 0.05)" : "rgba(30, 144, 255, 0.1)"}
-                backdropFilter="blur(8px)"
-                borderRadius="lg"
-                p={{ base: 3, md: 4 }}
-                boxShadow="0 4px 12px rgba(0, 0, 0, 0.2)"
-                _hover={{
-                  transform: "scale(1.02)",
-                  boxShadow: "0 6px 16px rgba(30, 144, 255, 0.4)",
-                }}
-                transition="all 0.3s"
-                role="article"
-                aria-labelledby={`notification-${notification.id}`}
-              >
-                <Flex
-                  justify="space-between"
-                  align="center"
-                  direction={{ base: "column", md: "row" }}
-                  gap={{ base: 2, md: 0 }}
+                Notifications
+                {hasNewUpdates && (
+                  <Badge 
+                    ml={2} 
+                    colorScheme="red" 
+                    variant="solid"
+                    borderRadius="full"
+                    animation="pulse 1.5s infinite"
+                  >
+                    New
+                  </Badge>
+                )}
+              </Text>
+            </Flex>
+            <TabList 
+              bg={colors.cardBg}
+              borderRadius="lg"
+              p={1}
+              gap={1}
+              overflowX="auto"
+              mb={2}
+              sx={{
+                "&::-webkit-scrollbar": {
+                  display: "none",
+                },
+                msOverflowStyle: "none",
+                scrollbarWidth: "none",
+              }}
+            >
+              {tabData.map((tab) => (
+                <Tab 
+                  key={tab.key}
+                  _selected={{ bg: colors.primary[500], color: "white" }} 
+                  bg={colors.cardBg}
+                  color="gray.300"
+                  _hover={{ color: "white" }}
+                  fontSize={tabFontSize}
+                  whiteSpace="nowrap"
+                  px={tabPx}
+                  py={2}
+                  flex="1"
+                  borderRadius="md"
                 >
-                  <Flex align="center" gap={{ base: 2, md: 3 }} w={{ base: "100%", md: "auto" }}>
-                    <Avatar
-                      size={{ base: "sm", md: "md" }}
-                      src={notification.profilePicURL}
-                      name={notification.username}
-                      cursor="pointer"
-                      onClick={() => navigateToProfile(notification.username)}
-                      _hover={{ transform: "scale(1.1)" }}
-                      transition="transform 0.2s"
-                      aria-label={`Profile of ${notification.username}`}
-                    />
-                    <Box>
-                      <Text
-                        id={`notification-${notification.id}`}
-                        fontWeight="bold"
-                        color={notification.read ? "gray.400" : "white"}
-                        fontSize={{ base: "sm", md: "md" }}
-                        cursor="pointer"
-                        onClick={() => navigateToProfile(notification.username)}
-                        _hover={{ color: "cyan.300" }}
+                  <HStack spacing={1}>
+                    <tab.icon size={16} />
+                    <Text>{tab.label}</Text>
+                    {tab.count > 0 && (
+                      <Badge 
+                        colorScheme={tab.color} 
+                        borderRadius="full" 
+                        fontSize="2xs"
+                        minW="4"
+                        h="4"
+                        display="flex"
+                        alignItems="center"
+                        justifyContent="center"
                       >
-                        {notification.message}
-                      </Text>
-                      <Text fontSize={{ base: "xs", md: "sm" }} color="gray.500" mt={1}>
-                        {notification.timestamp
-                          ? new Date(notification.timestamp).toLocaleString()
-                          : "Unknown time"}
-                      </Text>
-                      <Text
-                        fontSize={{ base: "xs", md: "sm" }}
-                        color="cyan.300"
-                        mt={1}
-                        cursor="pointer"
-                        onClick={() => showReaders(notification.readBy)}
-                        _hover={{ textDecoration: "underline" }}
-                        aria-label={`View users who read this notification (${notification.readBy.length})`}
-                      >
-                        Read by {notification.readBy.length} user{notification.readBy.length !== 1 ? "s" : ""}
-                      </Text>
-                    </Box>
-                  </Flex>
-                  {!notification.read && (
-                    <MotionButton
-                      size={{ base: "sm", md: "md" }}
-                      bg="linear-gradient(45deg, #1E90FF, #00CED1)"
-                      color="white"
-                      _hover={{ bg: "linear-gradient(45deg, #00CED1, #87CEEB)" }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => markAsRead(notification.id, notification.senderId)}
-                      mt={{ base: 2, md: 0 }}
-                      w={{ base: "full", md: "auto" }}
-                      aria-label={`Mark notification ${notification.id} as read`}
-                    >
-                      Mark as Read
-                    </MotionButton>
-                  )}
-                </Flex>
-              </MotionBox>
-            ))}
-          </VStack>
-        )}
-      </MotionBox>
-
-      {/* Modal for creating notification */}
-      <Modal isOpen={isOpen} onClose={onClose} size={{ base: "full", md: "md" }} motionPreset="slideInBottom">
-        <ModalOverlay bg="blackAlpha.800" />
-        <MotionBox variants={modalVariants} initial="hidden" animate="visible">
-          <ModalContent
-            bg="black"
-            border="1px solid"
-            borderColor="gray.700"
-            borderRadius={{ base: 0, md: "lg" }}
-            maxH={{ base: "100vh", md: "80vh" }}
-            overflowY="auto"
-            role="dialog"
-            aria-labelledby="create-notification-modal"
-          >
-            <ModalHeader color="white" fontSize={{ base: "lg", md: "xl" }} id="create-notification-modal">
-              Create Notification
-            </ModalHeader>
-            <ModalCloseButton color="white" aria-label="Close create notification modal" />
-            <ModalBody pb={6}>
-              <Textarea
-                placeholder="Enter your message"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                bg="gray.800"
-                color="white"
-                border="1px solid"
-                borderColor="gray.600"
-                resize="vertical"
-                maxLength={200}
-                minH="120px"
-                fontSize={{ base: "sm", md: "md" }}
-                _focus={{ borderColor: "cyan.300", boxShadow: "0 0 0 1px cyan.300" }}
-                aria-label="Notification message input"
-              />
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                colorScheme="teal"
-                mr={3}
-                onClick={createNotification}
-                isDisabled={!message.trim()}
-                size={{ base: "md", md: "lg" }}
-                bg="linear-gradient(45deg, #00CED1, #1E90FF)"
-                _hover={{ bg: "linear-gradient(45deg, #1E90FF, #87CEEB)" }}
-                aria-label="Submit notification"
-              >
-                Submit
-              </Button>
-              <Button
-                variant="ghost"
-                color="white"
-                onClick={onClose}
-                size={{ base: "md", md: "lg" }}
-                aria-label="Cancel notification creation"
-              >
-                Cancel
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </MotionBox>
-      </Modal>
-
-      {/* Modal for sender data */}
-      <Modal
-        isOpen={isSenderOpen}
-        onClose={onSenderClose}
-        size={{ base: "full", md: "lg" }}
-        motionPreset="slideInBottom"
-      >
-        <ModalOverlay bg="blackAlpha.800" />
-        <MotionBox variants={modalVariants} initial="hidden" animate="visible">
-          <ModalContent
-            bg="black"
-            border="1px solid"
-            borderColor="gray.700"
-            borderRadius={{ base: 0, md: "lg" }}
-            maxH={{ base: "100vh", md: "80vh" }}
-            overflowY="auto"
-            role="dialog"
-            aria-labelledby="sender-info-modal"
-          >
-            <ModalHeader color="white" fontSize={{ base: "lg", md: "xl" }} id="sender-info-modal">
-              Sender Information
-            </ModalHeader>
-            <ModalCloseButton color="white" aria-label="Close sender information modal" />
-            <ModalBody pb={6}>
-              {selectedSenderData ? (
-                <VStack align="start" spacing={{ base: 3, md: 4 }}>
-                  <Flex align="center" gap={3}>
-                    <Avatar
-                      size={{ base: "md", md: "lg" }}
-                      src={selectedSenderData.profilePicURL}
-                      name={selectedSenderData.username}
-                      aria-label={`Profile picture of ${selectedSenderData.username}`}
-                    />
-                    <Text color="white" fontWeight="bold" fontSize={{ base: "md", md: "lg" }}>
-                      {selectedSenderData.username}
-                    </Text>
-                  </Flex>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Full Name:</strong> {selectedSenderData.fullName || "N/A"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Email:</strong> {selectedSenderData.email || "N/A"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Profession:</strong> {selectedSenderData.profession || "N/A"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Bio:</strong> {selectedSenderData.bio || "N/A"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Created At:</strong>{" "}
-                    {selectedSenderData.createdAt
-                      ? new Date(selectedSenderData.createdAt).toLocaleString()
-                      : "Unknown"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Link:</strong>{" "}
-                    {selectedSenderData.link ? (
-                      <Link href={selectedSenderData.link} isExternal color="cyan.300" aria-label="Sender's external link">
-                        {selectedSenderData.link}
-                      </Link>
-                    ) : (
-                      "N/A"
+                        {tab.count}
+                      </Badge>
                     )}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>UID:</strong> {selectedSenderData.uid || "N/A"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Posts:</strong>{" "}
-                    {selectedSenderData.posts.length > 0 ? selectedSenderData.posts.join(", ") : "None"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Rating:</strong>{" "}
-                    {selectedSenderData.Rating.length > 0 ? selectedSenderData.Rating.join(", ") : "None"}
-                  </Text>
-                  <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                    <strong>Sold Instances:</strong>{" "}
-                    {selectedSenderData.SoldInstances.length > 0
-                      ? selectedSenderData.SoldInstances.join(", ")
-                      : "None"}
-                  </Text>
-                </VStack>
-              ) : (
-                <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                  No sender data available.
-                </Text>
-              )}
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                variant="ghost"
-                color="white"
-                onClick={onSenderClose}
-                size={{ base: "md", md: "lg" }}
-                aria-label="Close sender information"
-              >
-                Close
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </MotionBox>
-      </Modal>
+                  </HStack>
+                </Tab>
+              ))}
+            </TabList>
+            <Flex justify="end">
+              <Tooltip label="Refresh AI Suggestions">
+                <IconButton
+                  icon={<FiRefreshCw />}
+                  onClick={runAiAnalysis}
+                  isLoading={isAiAnalyzing}
+                  aria-label="Refresh suggestions"
+                  borderRadius="full"
+                  size="md"
+                  bg={colors.primary[500]}
+                  _hover={{ bg: colors.primary[600] }}
+                />
+              </Tooltip>
+            </Flex>
+          </Box>
 
-      {/* Modal for readers */}
-      <Modal
-        isOpen={isReadersOpen}
-        onClose={onReadersClose}
-        size={{ base: "full", md: "sm" }}
-        motionPreset="slideInBottom"
-      >
-        <ModalOverlay bg="blackAlpha.800" />
-        <MotionBox variants={modalVariants} initial="hidden" animate="visible">
-          <ModalContent
-            bg="black"
-            border="1px solid"
-            borderColor="gray.700"
-            borderRadius={{ base: 0, md: "lg" }}
-            maxH={{ base: "100vh", md: "80vh" }}
-            overflowY="auto"
-            role="dialog"
-            aria-labelledby="readers-modal"
-          >
-            <ModalHeader color="white" fontSize={{ base: "lg", md: "xl" }} id="readers-modal">
-              Users Who Read
-            </ModalHeader>
-            <ModalCloseButton color="white" aria-label="Close readers modal" />
-            <ModalBody pb={6}>
-              {selectedReaders.length > 0 ? (
-                <List spacing={2}>
-                  {selectedReaders.map((username, index) => (
-                    <ListItem key={index} color="white" fontSize={{ base: "sm", md: "md" }}>
-                      {username}
-                    </ListItem>
+          <TabPanels mt={4}>
+            {/* Connection Requests Tab */}
+            <TabPanel px={0} py={0}>
+              {isFetching ? (
+                <VStack spacing={6} align="stretch">
+                  {[...Array(3)].map((_, i) => (
+                    <Box key={i} bg={colors.cardBg} borderRadius="xl" p={4} height="120px" />
                   ))}
-                </List>
+                </VStack>
+              ) : connectionRequests.length === 0 ? (
+                <Box textAlign="center" py={12} color={colors.secondaryText}>
+                  <Text fontSize="xl" mb={2}>No connection requests</Text>
+                  <Text fontSize="lg">Requests will appear here when received</Text>
+                </Box>
               ) : (
-                <Text color="white" fontSize={{ base: "sm", md: "md" }}>
-                  No users have read this notification yet.
-                </Text>
+                <VStack spacing={6} align="stretch">
+                  {connectionRequests.map((connection) => (
+                    <ConnectionRequestItem key={connection.id} connection={connection} />
+                  ))}
+                </VStack>
               )}
-            </ModalBody>
-            <ModalFooter>
-              <Button
-                variant="ghost"
-                color="white"
-                onClick={onReadersClose}
-                size={{ base: "md", md: "lg" }}
-                aria-label="Close readers list"
-              >
-                Close
-              </Button>
-            </ModalFooter>
-          </ModalContent>
-        </MotionBox>
-      </Modal>
+            </TabPanel>
+
+            {/* AI Suggestions Tab */}
+            <TabPanel px={0} py={0}>
+              {isAiAnalyzing ? (
+                <Box textAlign="center" py={12}>
+                  <Spinner size="lg" color={colors.primary[400]} mb={4} />
+                  <Text color={colors.secondaryText} fontSize="lg">
+                    Analyzing potential connections...
+                  </Text>
+                </Box>
+              ) : aiSuggestions.length === 0 ? (
+                <Box textAlign="center" py={12} color={colors.secondaryText}>
+                  <Text fontSize="xl" mb={2}>No AI suggestions yet</Text>
+                  <Text mb={4} fontSize="lg">Complete your profile for better matches</Text>
+                  <Button
+                    bg={colors.gradient.primary}
+                    color={colors.text}
+                    _hover={{ bg: colors.gradient.hover }}
+                    onClick={runAiAnalysis}
+                    leftIcon={<FiRefreshCw />}
+                    size="lg"
+                  >
+                    Generate Suggestions
+                  </Button>
+                </Box>
+              ) : (
+                <VStack spacing={6} align="stretch">
+                  {aiSuggestions.map((suggestion, index) => (
+                    <AISuggestionItem key={suggestion.id || index} suggestion={suggestion} index={index} />
+                  ))}
+                </VStack>
+              )}
+            </TabPanel>
+
+            {/* Sent Requests Tab */}
+            <TabPanel px={0} py={0}>
+              {sentRequests.length === 0 ? (
+                <Box textAlign="center" py={12} color={colors.secondaryText}>
+                  <Text fontSize="xl" mb={2}>No sent requests</Text>
+                  <Text fontSize="lg">Your pending requests will appear here</Text>
+                </Box>
+              ) : (
+                <VStack spacing={6} align="stretch">
+                  {sentRequests.map((request) => (
+                    <SentRequestItem key={request.id} request={request} />
+                  ))}
+                </VStack>
+              )}
+            </TabPanel>
+
+            {/* Connections Tab */}
+            <TabPanel px={0} py={0}>
+              {connections.length === 0 ? (
+                <Box textAlign="center" py={12} color={colors.secondaryText}>
+                  <Text fontSize="xl" mb={2}>No connections yet</Text>
+                  <Text fontSize="lg">Build your network to see connections here</Text>
+                </Box>
+              ) : (
+                <VStack spacing={6} align="stretch">
+                  {connections.map((connection) => (
+                    <ConnectionItem key={connection.id} connection={connection} />
+                  ))}
+                </VStack>
+              )}
+            </TabPanel>
+          </TabPanels>
+        </Tabs>
+      </MotionBox>
     </Container>
   );
 };

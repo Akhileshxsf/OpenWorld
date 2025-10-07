@@ -277,15 +277,15 @@ const ProfilePosts = () => {
             </Box>
           ))
         ) : (
-          <Text>No posts available.</Text>
+          <Text>click on '+' button to add posts</Text>
         )}
       </Grid>
 
       {user?.uid && (
         <Flex
           position="fixed"
-          bottom="80px"  // Moved up from 40px
-          right="90px"
+          bottom="120px"  // Moved up from 40px
+          right="30px"
           alignItems="center"
           justifyContent="center"
           bg="blue.600"
@@ -316,7 +316,7 @@ const ProfilePosts = () => {
           <ModalBody>
             <VStack spacing={4} align="stretch">
               <Textarea
-                placeholder="Write a caption..."
+                placeholder="your portfolio links/achivements/create your brand identity"
                 value={newPost.caption}
                 onChange={(e) =>
                   setNewPost((prev) => ({ ...prev, caption: e.target.value }))

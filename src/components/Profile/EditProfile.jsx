@@ -116,9 +116,9 @@ const EditProfile = ({ isOpen, onClose }) => {
               </FormControl>
 
               <FormControl>
-                <FormLabel fontSize={"sm"}>About  (Add Links:-portfolio website/company website/googleform (if hiring))</FormLabel>
+                <FormLabel fontSize={"sm"}>About</FormLabel>
                 <Input
-                  placeholder={"Just say what you do and add links "}
+                  placeholder={"Just say about your intersts/goals/skills "}
                   size={"sm"}
                   type={"text"}
                   value={inputs.bio}

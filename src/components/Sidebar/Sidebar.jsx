@@ -1,4 +1,4 @@
-import { Box, Flex, Link, Tooltip, Button, useDisclosure, Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton } from '@chakra-ui/react';
+import { Box, Flex, Link, Tooltip, Button, useDisclosure} from '@chakra-ui/react';
 import { Link as RouterLink } from 'react-router-dom';
 import { BiLogOut } from "react-icons/bi";
 import useLogout from '../../hooks/useLogout';
@@ -45,27 +45,11 @@ const Sidebar = () => {
       >
         {/* Logo (Hidden on Mobile) */}
         <Link to={"/"} as={RouterLink} pl={2} display={{ base: "none", md: "block" }} cursor="pointer">
-          <img src="/openworld2022.jpeg" alt="OpenWorld Logo" style={{ width: '50px', height: 'auto' }} />
+          <img src="/xopenworld.png" alt="OpenWorld Logo" style={{ width: '120px', height: 'auto' }} />
         </Link>
 
         {/* Sidebar Items */}
         <Sidebaritems />
-
-        {/* Mode Button (Hidden on Mobile) */}
-        <Flex justify="center" mt={4} display={{ base: "none", md: "flex" }}>
-          <Button
-            onClick={onOpen}
-            variant="outline"
-            colorScheme="teal"
-            size="lg"
-            w="full"
-            border="1px solid"
-            borderColor="teal.400"
-            _hover={{ bg: "teal.400", color: "white" }}
-          >
-            Mode
-          </Button>
-        </Flex>
 
         {/* Logout */}
         <Tooltip
@@ -100,28 +84,7 @@ const Sidebar = () => {
         </Tooltip>
       </Flex>
 
-      {/* Modal for Mode Options */}
-      <Modal isOpen={isOpen} onClose={onClose}>
-        <ModalOverlay />
-        <ModalContent bg="black" color="white">
-          <ModalHeader>Select Mode</ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <Button w="full" mb={3} colorScheme="teal" variant="solid" _hover={{ bg: "teal.600" }}>
-              Buy/Sell Time
-            </Button>
-            <Button w="full" mb={3} colorScheme="teal" variant="solid" _hover={{ bg: "teal.600" }}>
-              Ask/Give Time
-            </Button>
-            <Button w="full" mb={3} colorScheme="teal" variant="solid" _hover={{ bg: "teal.600" }}>
-              Borrow Time
-            </Button>
-          </ModalBody>
-          <ModalFooter>
-            <Button colorScheme="red" onClick={onClose}>Close</Button>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+      {/* Modal for Mode Options - Removed since Mode button is removed */}
     </MotionBox>
   );
 };

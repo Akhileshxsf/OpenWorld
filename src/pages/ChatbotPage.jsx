@@ -25,7 +25,7 @@ import { ArrowForwardIcon, SearchIcon, DeleteIcon } from "@chakra-ui/icons";
 import { FaMicrophone, FaSmile, FaEllipsisV } from "react-icons/fa";
 import { createGroq } from '@ai-sdk/groq';
 import { streamText } from 'ai';
-import { firestore, auth } from "../../firebase/firebase";
+import { firestore, auth } from "./../firebase/firebase";
 import { 
   doc, 
   setDoc, 
@@ -52,7 +52,7 @@ const groqClient = createGroq({
 const MotionButton = motion(Button);
 const MotionFlex = motion(Flex);
 
-const HomePage = () => {
+const ChatbotPage = () => {
   const [authUser, loading] = useAuthState(auth);
   const [messages, setMessages] = useState([]);
   const [userInput, setUserInput] = useState("");
@@ -99,8 +99,8 @@ const HomePage = () => {
   // Load conversation from localStorage on component mount
   useEffect(() => {
     if (authUser) {
-      const savedMessages = localStorage.getItem(`homepage_messages_${authUser.uid}`);
-      const savedContext = localStorage.getItem(`homepage_context_${authUser.uid}`);
+      const savedMessages = localStorage.getItem(`chatbot_messages_${authUser.uid}`);
+      const savedContext = localStorage.getItem(`chatbot_context_${authUser.uid}`);
       
       if (savedMessages) {
         try {
@@ -143,13 +143,13 @@ const HomePage = () => {
   // Save conversation to localStorage whenever messages or context change
   useEffect(() => {
     if (authUser && messages.length > 0) {
-      localStorage.setItem(`homepage_messages_${authUser.uid}`, JSON.stringify(messages));
+      localStorage.setItem(`chatbot_messages_${authUser.uid}`, JSON.stringify(messages));
     }
   }, [messages, authUser]);
 
   useEffect(() => {
     if (authUser) {
-      localStorage.setItem(`homepage_context_${authUser.uid}`, JSON.stringify(conversationContext));
+      localStorage.setItem(`chatbot_context_${authUser.uid}`, JSON.stringify(conversationContext));
     }
   }, [conversationContext, authUser]);
 
@@ -1280,4 +1280,4 @@ const HomePage = () => {
   );
 };
 
-export default HomePage;
+export default ChatbotPage;

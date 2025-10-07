@@ -1,42 +1,71 @@
-import { Box, Image, VStack, Flex, Text } from '@chakra-ui/react';
+import { Box, VStack, Flex, Text, Tabs, TabList, TabPanels, Tab, TabPanel } from '@chakra-ui/react';
 import { useState } from 'react';
 import Login from './Login';
 import Signup from './Signup';
 import GoogleAuth from './GoogleAuth';
 
-const AuthForm = () => {
-  const [isLogin, setIsLogin] = useState(true);
+const AuthForm = ({ isLogin: initialIsLogin = true, onIsLoginChange }) => {
+  const [isLogin, setIsLogin] = useState(initialIsLogin);
+
+  const handleTabChange = (index) => {
+    const newIsLogin = index === 0;
+    setIsLogin(newIsLogin);
+    if (onIsLoginChange) {
+      onIsLoginChange(newIsLogin);
+    }
+  };
 
   return (
-    <>
-      <Box border={"1px solid gray"} borderRadius={4} padding={5}>
-        <VStack spacing={4}>
-          <Image src='/openworld2022.jpeg' h={24} cursor={"pointer"} alt='OpenWorld' />
-
-          {isLogin ? <Login /> : <Signup />}
-
-          {/* -------------OR-------------- */}
-          <Flex alignItems={"center"} justifyContent={"center"} wrap="wrap" my={4} gap={1} w={"full"}>
-            <Box flex={2} h={"1px"} bg={"gray.400"} />
-            <Text mx={1} color={"white"}>OR</Text>
-            <Box flex={2} h={"1px"} bg={"gray.400"} />
-          </Flex>
-
-          <GoogleAuth prefix={isLogin ? "Log in" : "Sign up"} />
-        </VStack>
-      </Box>
-
-      <Box border={"1px solid gray"} borderRadius={4} padding={5}>
-        <Flex alignItems={"center"} justifyContent={"center"}>
-          <Box mx={1} fontSize={14}>
-            {isLogin ? "Don't have an account?" : "Already have an account?"}
-          </Box>
-          <Box onClick={() => setIsLogin(!isLogin)} color={"blue.500"} cursor={"pointer"}>
-            {isLogin ? "Sign Up" : "Log in"}
-          </Box>
-        </Flex>
-      </Box>
-    </>
+    <VStack spacing={6} w={"full"}>
+      <Tabs
+        variant="unstyled"
+        index={isLogin ? 0 : 1}
+        onChange={handleTabChange}
+        w="full"
+        align="center"
+      >
+        <TabList mb={6} borderBottom="1px solid rgba(255, 255, 255, 0.1)">
+          <Tab
+            color={isLogin ? "#FFFFFF" : "#CCCCCC"}
+            fontWeight={isLogin ? "bold" : "medium"}
+            borderBottom={isLogin ? "2px solid #1E90FF" : "none"}
+            _hover={{ color: "#FFFFFF" }}
+            fontFamily={"'Poppins', sans-serif"}
+            fontSize="md"
+          >
+            Log In
+          </Tab>
+          <Tab
+            color={!isLogin ? "#FFFFFF" : "#CCCCCC"}
+            fontWeight={!isLogin ? "bold" : "medium"}
+            borderBottom={!isLogin ? "2px solid #1E90FF" : "none"}
+            _hover={{ color: "#FFFFFF" }}
+            fontFamily={"'Poppins', sans-serif"}
+            fontSize="md"
+          >
+            Sign Up
+          </Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel p={0}>
+            <Login />
+          </TabPanel>
+          <TabPanel p={0}>
+            <Signup />
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+      
+      <Flex alignItems={"center"} justifyContent={"center"} wrap="wrap" my={4} gap={1} w={"full"}>
+        <Box flex={1} h={"1px"} bg={"rgba(255, 255, 255, 0.3)"} />
+        <Text mx={3} color={"#CCCCCC"} fontFamily={"'Poppins', sans-serif"} fontSize="sm">
+          OR
+        </Text>
+        <Box flex={1} h={"1px"} bg={"rgba(255, 255, 255, 0.3)"} />
+      </Flex>
+      
+      <GoogleAuth prefix={isLogin ? "Log in" : "Sign up"} />
+    </VStack>
   );
 };
 

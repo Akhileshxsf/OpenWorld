@@ -1,70 +1,45 @@
 import { Box, Flex, Tooltip, keyframes } from "@chakra-ui/react";
 import { useLocation, Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { collection, onSnapshot, query, where, doc as firestoreDoc, getDoc } from "firebase/firestore";
-import { firestore, auth } from "../../firebase/firebase";
-import { useAuthState } from "react-firebase-hooks/auth";
+import { useNotificationCount } from "../../hooks/useNotificationCount";
 
-// Flicker animation for mobile text
+// Enhanced animations
 const flicker = keyframes`
-  0%, 100% { text-shadow: 0 0 5px rgba(75, 158, 255, 0.8); }
-  50% { text-shadow: 0 0 10px rgba(75, 158, 255, 1); }
+  0%, 100% { 
+    text-shadow: 0 0 5px rgba(75, 158, 255, 0.8); 
+    opacity: 1;
+  }
+  50% { 
+    text-shadow: 0 0 15px rgba(75, 158, 255, 1), 0 0 20px rgba(75, 158, 255, 0.8);
+    opacity: 0.9;
+  }
 `;
 
-// Glow animation for icon
-const glow = keyframes`
-  0%, 100% { filter: drop-shadow(0 0 5px rgba(75, 158, 255, 0.8)); }
-  50% { filter: drop-shadow(0 0 10px rgba(75, 158, 255, 1)); }
+const pulseGlow = keyframes`
+  0%, 100% { 
+    filter: drop-shadow(0 0 5px rgba(255, 65, 108, 0.8));
+    transform: scale(1);
+  }
+  50% { 
+    filter: drop-shadow(0 0 15px rgba(255, 65, 108, 1)) drop-shadow(0 0 25px rgba(255, 65, 108, 0.6));
+    transform: scale(1.05);
+  }
+`;
+
+const subtleBounce = keyframes`
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
 `;
 
 const Notifications = () => {
   const commonIconSize = 25;
   const { pathname } = useLocation();
   const isActive = pathname === "/notification";
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [authUser, loading] = useAuthState(auth);
+  const { unreadCount, hasNewUpdates, updateLastChecked } = useNotificationCount();
 
-  // Fetch unread notification count
-  useEffect(() => {
-    if (!authUser || loading) {
-      setUnreadCount(0);
-      return;
-    }
-
-    const notificationsRef = collection(firestore, "notifications");
-    const q = query(notificationsRef, where("type", "==", "notification"));
-
-    const unsubscribe = onSnapshot(
-      q,
-      async (snapshot) => {
-        let unread = 0;
-        await Promise.all(
-          snapshot.docs.map(async (doc) => {
-            const userStatusRef = firestoreDoc(
-              firestore,
-              `notifications/${doc.id}/userStatus`,
-              authUser.uid
-            );
-            try {
-              const userStatusDoc = await getDoc(userStatusRef);
-              if (!userStatusDoc.exists() || !userStatusDoc.data().read) {
-                unread++;
-              }
-            } catch (error) {
-              console.warn(`Failed to fetch userStatus for notification ${doc.id}:`, error);
-            }
-          })
-        );
-        setUnreadCount(unread);
-      },
-      (error) => {
-        console.error("Error fetching unread notifications:", error);
-        setUnreadCount(0);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [authUser, loading]);
+  const handleClick = () => {
+    // Mark as checked when user clicks the notification icon
+    updateLastChecked();
+  };
 
   return (
     <Tooltip
@@ -73,7 +48,11 @@ const Notifications = () => {
       ml={1}
       openDelay={500}
       display={{ base: "block", md: "none" }}
-      label="Notifications"
+      label={`${unreadCount} unread notifications${hasNewUpdates ? ' • New updates!' : ''}`}
+      bg="gray.800"
+      color="white"
+      borderRadius="md"
+      fontSize="sm"
     >
       <Flex
         as={Link}
@@ -82,7 +61,7 @@ const Notifications = () => {
         gap={{ base: 1, md: 4 }}
         bg={{
           base: isActive ? "rgba(75, 158, 255, 0.3)" : "transparent",
-          md: "transparent",
+          md: isActive ? "whiteAlpha.200" : "transparent",
         }}
         borderRadius={{ base: 10, md: 6 }}
         p={{ base: 2, md: 2 }}
@@ -90,15 +69,20 @@ const Notifications = () => {
         justifyContent={{ base: "center", md: "flex-start" }}
         flexDir={{ base: "column", md: "row" }}
         _hover={{
-          base: {
-            bg: "rgba(75, 158, 255, 0.4)",
-            boxShadow: "0 0 12px rgba(75, 158, 255, 0.6)",
-            transform: "scale(1.1)",
+          bg: {
+            base: "rgba(75, 158, 255, 0.4)",
+            md: "whiteAlpha.300"
           },
-          md: { bg: "whiteAlpha.400" },
+          boxShadow: {
+            base: "0 0 12px rgba(75, 158, 255, 0.6)",
+            md: "0 0 8px rgba(75, 158, 255, 0.4)"
+          },
+          transform: "scale(1.02)",
         }}
-        transition="all 0.3s"
+        transition="all 0.3s ease-in-out"
         position="relative"
+        overflow="visible"
+        onClick={handleClick}
         _after={{
           content: '""',
           position: "absolute",
@@ -110,46 +94,89 @@ const Notifications = () => {
           display: { base: "block", md: "none" },
         }}
       >
-        <Box position="relative" display="inline-block">
+        {/* Main Icon Container */}
+        <Box 
+          position="relative" 
+          display="inline-block"
+          animation={hasNewUpdates ? `${subtleBounce} 2s infinite` : "none"}
+        >
           <img
             src="/noti.png"
             alt="Notifications"
             style={{
               width: commonIconSize,
               height: "auto",
-              animation: unreadCount > 0 ? `${glow} 1.5s infinite` : "none",
+              animation: hasNewUpdates ? `${pulseGlow} 2s infinite` : "none",
+              transition: "all 0.3s ease",
             }}
           />
+          
+          {/* Unread Count Badge */}
           {unreadCount > 0 && (
             <Box
               position="absolute"
-              top="-5px"
-              right="-5px"
-              bg="red.500"
+              top="-6px"
+              right="-6px"
+              bg={hasNewUpdates ? "#FF416C" : "red.500"}
               color="white"
               borderRadius="full"
-              minW={{ base: "16px", md: "20px" }}
-              h={{ base: "16px", md: "20px" }}
+              minW={{ base: "18px", md: "20px" }}
+              h={{ base: "18px", md: "20px" }}
               display="flex"
               alignItems="center"
               justifyContent="center"
               fontSize={{ base: "xs", md: "sm" }}
               fontWeight="bold"
-              boxShadow="0 0 5px rgba(0, 0, 0, 0.3)"
+              boxShadow={`0 0 8px ${hasNewUpdates ? 'rgba(255, 65, 108, 0.8)' : 'rgba(255, 0, 0, 0.6)'}`}
+              border="2px solid"
+              borderColor="white"
+              animation={hasNewUpdates ? `${pulseGlow} 1.5s infinite` : "none"}
+              zIndex={2}
             >
-              {unreadCount}
+              {unreadCount > 99 ? "99+" : unreadCount}
             </Box>
           )}
+
+          {/* New Updates Pulse Ring */}
+          {hasNewUpdates && unreadCount === 0 && (
+            <Box
+              position="absolute"
+              top="-8px"
+              right="-8px"
+              w="12px"
+              h="12px"
+              bg="#FF416C"
+              borderRadius="full"
+              boxShadow="0 0 10px rgba(255, 65, 108, 0.8)"
+              animation={`${pulseGlow} 2s infinite`}
+              zIndex={1}
+            />
+          )}
         </Box>
+
+        {/* Label */}
         <Box
           display={{ base: "block", md: "block" }}
           color="#87CEEB"
           fontWeight="bold"
           fontSize={{ base: "xs", md: "md" }}
           fontStyle="italic"
-          animation={{ base: `${flicker} 1.5s infinite`, md: "none" }}
+          animation={hasNewUpdates ? `${flicker} 2s infinite` : "none"}
+          position="relative"
         >
           Notify
+          {/* Underline effect for new updates */}
+          {hasNewUpdates && (
+            <Box
+              position="absolute"
+              bottom="-2px"
+              left="0"
+              right="0"
+              height="1px"
+              bg="linear-gradient(90deg, transparent, #FF416C, transparent)"
+              animation={`${flicker} 2s infinite`}
+            />
+          )}
         </Box>
       </Flex>
     </Tooltip>

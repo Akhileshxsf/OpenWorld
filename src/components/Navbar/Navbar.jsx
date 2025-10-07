@@ -5,7 +5,7 @@ const Navbar = () => {
 	return (
 		<Container maxW={"container.lg"} my={4}>
 			<Flex w={"full"} justifyContent={{ base: "center", sm: "space-between" }} alignItems={"center"}>
-				<Image src='/Openlogo.png'  h={5} display={{ base: "none", sm: "block" }} cursor={"pointer"} />
+				<Image src='/openworld2022.jpeg'  h={20} display={{ base: "none", sm: "block" }} cursor={"pointer"} />
 				<Flex gap={4}>
 					<Link to='/auth'>
 						<Button colorScheme={"blue"} size={"sm"}>

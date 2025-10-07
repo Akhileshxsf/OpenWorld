@@ -159,7 +159,7 @@ const CreatePost = memo(() => {
           <ModalCloseButton color="white" />
           <ModalBody pb={6}>
             <Textarea
-              placeholder="Just say why people need to buy your time / trade time with you"
+              placeholder="Just convince someone to give you money (showcase what value you can provide)"
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               bg="gray.800"
@@ -170,7 +170,7 @@ const CreatePost = memo(() => {
             />
             <Input
               mt={4}
-              placeholder="Add tags (e.g., food delivery narela, fullstack course, comedy...)"
+              placeholder="Target Audience (e.g.,students in hyderabad,schools,farmers etc)"
               value={tags}
               onChange={(e) => setTags(e.target.value)}
               bg="gray.800"

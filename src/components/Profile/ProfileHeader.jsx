@@ -91,15 +91,7 @@ const ProfileHeader = () => {
               >
                 BuyTime
               </Button>
-              <Button
-                bg={"blue.500"}
-                color={"white"}
-                _hover={{ bg: "blue.600" }}
-                size={{ base: "xs", md: "sm" }}
-                onClick={handleMessage}
-              >
-                Message
-              </Button>
+              
             </Flex>
           )}
         </Flex>
@@ -109,13 +101,13 @@ const ProfileHeader = () => {
             <Text as="span" fontWeight={"bold"} mr={1}>
               {userProfile.posts ? userProfile.posts.length : 0}
             </Text>
-            Posts
+            Trade Posts
           </Text>
           <Text fontSize={{ base: "xs", md: "sm" }}>
             <Text as="span" fontWeight={"bold"} mr={1}>
               {userProfile.SoldInstances.length}
             </Text>
-            SoldInstances
+            Reputation
           </Text>
           <Text fontSize={{ base: "xs", md: "sm" }}>
             <Text as="span" fontWeight={"bold"} mr={1}>

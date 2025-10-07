@@ -1,5 +1,6 @@
-import { Container, Flex, VStack, Box, Image, Text, Heading } from "@chakra-ui/react";
+import { Container, Flex, VStack, Box, Text, Grid, GridItem, Image } from "@chakra-ui/react";
 import { motion } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 import AuthForm from "../../../components/AuthForm/AuthForm";
 
 // Motion variants for animations
@@ -8,122 +9,154 @@ const containerVariants = {
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.8, ease: "easeOut" },
+    transition: { duration: 0.8, ease: "easeOut", staggerChildren: 0.2 },
   },
 };
 
-const logoVariants = {
-  hover: { scale: 1.1, rotate: 5, transition: { duration: 0.3 } },
+const heroVariants = {
+  hidden: { opacity: 0, scale: 0.9 },
+  visible: { opacity: 1, scale: 1, transition: { duration: 0.6 } },
 };
 
 const MotionBox = motion(Box);
-const MotionImage = motion(Image);
+const MotionText = motion(Text);
 
 const AuthPage = () => {
+  const [isLogin, setIsLogin] = useState(true);
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    // Static background setup
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+
+    // Set canvas size
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      drawBackground();
+    };
+
+    const drawBackground = () => {
+      // Solid dark black base
+      ctx.fillStyle = "rgb(0, 0, 0)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Subtle white radial gradient
+      const gradient = ctx.createRadialGradient(
+        canvas.width / 2,
+        canvas.height / 2,
+        0,
+        canvas.width / 2,
+        canvas.height / 2,
+        Math.max(canvas.width, canvas.height) / 1.5
+      );
+      gradient.addColorStop(0, "rgba(255, 255, 255, 0.05)");
+      gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    };
+
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+
+    return () => {
+      window.removeEventListener("resize", resizeCanvas);
+    };
+  }, []);
+
   return (
     <Flex
-      minH={"100vh"} // Full viewport height
-      w={"100vw"} // Full viewport width
-      bg={"black"}
+      minH={"100vh"}
+      w={"100vw"}
+      position={"relative"}
       justifyContent={"center"}
       alignItems={"center"}
-      px={{ base: 4, md: 8 }}
-      overflow={"hidden"} // Prevent scrolling issues
+      overflow={"hidden"}
+      fontFamily={"'Poppins', sans-serif"}
     >
-      <Container
-        maxW={"container.md"}
-        w={"full"} // Ensure container takes full width within limits
-        h={"full"} // Ensure container takes full height within limits
-        padding={0}
-        display={"flex"}
-        justifyContent={"center"}
-        alignItems={"center"}
+      <canvas
+        ref={canvasRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          zIndex: -1,
+        }}
+      />
+      <Grid
+        templateAreas={{
+          base: `"hero" "form"`,
+          md: `"hero form"`,
+        }}
+        templateRows={{ base: "auto 1fr", md: "1fr" }}
+        templateColumns={{ base: "1fr", md: "1fr 1fr" }}
+        gap={{ base: 0, md: 0 }}
+        w={"full"}
+        h={"full"}
+        maxW={"container.xl"}
       >
-        <MotionBox
-          initial="hidden"
-          animate="visible"
-          variants={containerVariants}
-          bg={"black"} // Strictly black inside
-          borderRadius={"2xl"}
-          boxShadow={"0 0 20px rgba(255, 255, 255, 0.1)"}
-          p={{ base: 6, md: 10 }}
-          w={"full"} // Full width within container
-          maxW={"md"} // Limit max width for readability
-          h={"auto"} // Height adjusts to content
-          minH={{ base: "auto", md: "80vh" }} // Minimum height for larger screens
-        >
-          <Flex
-            direction={"column"}
-            justifyContent={"space-between"} // Distribute content evenly
-            alignItems={"center"}
-            gap={{ base: 8, md: 12 }} // Responsive gap
-            h={"full"} // Ensure Flex takes full height of MotionBox
+        {/* Hero Section */}
+        <GridItem area={"hero"} display={"flex"} justifyContent={"center"} alignItems={"center"} p={{ base: 8, md: 16 }}>
+          <MotionBox
+            initial="hidden"
+            animate="visible"
+            variants={heroVariants}
+            textAlign={{ base: "center", md: "left" }}
+            maxW={"md"}
           >
-            {/* Header */}
-            <VStack spacing={2}>
-              <Heading
-                as="h1"
-                size={{ base: "lg", md: "xl" }} // Responsive heading size
-                color={"white"}
-                fontWeight={"extrabold"}
-                letterSpacing={"tight"}
-                textTransform={"uppercase"}
-              >
-                Welcome 
-              </Heading>
-              <Text color={"gray.400"} fontSize={{ base: "sm", md: "md" }}>
-                Sign in to our universe
-              </Text>
-            </VStack>
-
-            {/* Auth Form */}
-            <VStack
-              spacing={6}
-              align={"stretch"}
-              w={"full"}
-              maxW={"sm"} // Slightly narrower form for better fit
-              flex={1} // Allow form section to grow
-            >
-              <AuthForm />
-              <MotionBox
-                textAlign={"center"}
-                color={"white"}
+            <VStack spacing={{ base: 4, md: 6 }} align={{ base: "center", md: "start" }}>
+              <MotionText
+                color={"#FFFFFF"}
+                fontSize={{ base: "2xl", md: "4xl" }}
                 fontWeight={"bold"}
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.2 }}
+                lineHeight={1.2}
+                variants={containerVariants}
               >
-                Get the app now!
-              </MotionBox>
-              <Flex gap={{ base: 4, md: 6 }} justifyContent={"center"}>
-                <MotionImage
-                  src="/playstore.png"
-                  h={{ base: "10", md: "12" }} // Responsive logo size
-                  alt="Playstore logo"
-                  filter={"grayscale(100%) brightness(90%)"}
-                  variants={logoVariants}
-                  whileHover="hover"
-                />
-                <MotionImage
-                  src="/microsoft.png"
-                  h={{ base: "10", md: "12" }} // Responsive logo size
-                  alt="Microsoft logo"
-                  filter={"grayscale(100%) brightness(90%)"}
-                  variants={logoVariants}
-                  whileHover="hover"
-                />
-              </Flex>
+                India's First Social Network for Trading Time
+              </MotionText>
+              <MotionText
+                color={"#CCCCCC"}
+                fontSize={{ base: "md", md: "lg" }}
+                fontWeight={"medium"}
+                lineHeight={1.5}
+                variants={containerVariants}
+              >
+                Connect with people beyond your network through AI friends. Discover meaningful exchanges and build lasting connections.
+              </MotionText>
             </VStack>
+          </MotionBox>
+        </GridItem>
 
-            {/* Footer Accent */}
-            <Box
-              w={{ base: "70%", md: "50%" }} // Responsive width
-              h={"2px"}
-              bgGradient={"linear(to-r, gray.700, white, gray.700)"}
-              borderRadius={"full"}
-            />
-          </Flex>
-        </MotionBox>
-      </Container>
+        {/* Auth Form Section */}
+        <GridItem area={"form"} display={"flex"} justifyContent={"center"} alignItems={"center"} p={{ base: 4, md: 8 }}>
+          <MotionBox
+            initial="hidden"
+            animate="visible"
+            variants={containerVariants}
+            bg={"black"}
+            borderRadius={"xl"}
+            boxShadow={"0 0 15px rgba(255, 255, 255, 0.15)"}
+            p={{ base: 6, md: 8 }}
+            w={"full"}
+            maxW={"sm"}
+            minH={{ base: "auto", md: "60vh" }}
+          >
+            <VStack spacing={6} align={"stretch"} w={"full"}>
+              <Image
+                src="/openworld2022.jpeg"
+                h={20}
+                mx="auto"
+                alt="OpenWorld"
+                borderRadius={"md"}
+              />
+              <AuthForm isLogin={isLogin} onIsLoginChange={setIsLogin} />
+            </VStack>
+          </MotionBox>
+        </GridItem>
+      </Grid>
     </Flex>
   );
 };
