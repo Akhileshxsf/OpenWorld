@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Larger than GitHub's 100 MB file limit
+public/Time.mp4
+public/Mira Video updated.mp4
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
