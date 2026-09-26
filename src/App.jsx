@@ -7,6 +7,7 @@ import MessageTab from "./components/Profile/MessageTab";
 import NotificationsPage from "./pages/NotificationsPage/NotificationsPage";
 import ChatbotPage from "./pages/ChatbotPage";
 import LandingPage from "./pages/LandingPage/LandingPage";
+import DashboardPage from "./pages/HomePage/DashboardPage";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "./firebase/firebase";
 
@@ -28,6 +29,12 @@ function App() {
           element={authUser ? <HomePage /> : <Navigate to="/" replace />}
         />
         
+        {/* Dashboard page - accessible to all authenticated users */}
+        <Route
+          path="/dashboard"
+          element={authUser ? <DashboardPage /> : <Navigate to="/" replace />}
+        />
+        
         {/* Auth page */}
         <Route
           path="/auth"
@@ -43,13 +50,17 @@ function App() {
           element={authUser ? <ChatbotPage /> : <Navigate to="/" replace />}
         />
         
-        {/* Messages page - FIXED ROUTE */}
+        {/* Messages page - UPDATED ROUTES */}
         <Route
           path="/messages"
           element={authUser ? <MessageTab /> : <Navigate to="/" replace />}
         />
+        <Route
+          path="/messages/:chatId"
+          element={authUser ? <MessageTab /> : <Navigate to="/" replace />}
+        />
         
-        {/* Notifications page - FIXED ROUTE */}
+        {/* Notifications page */}
         <Route
           path="/notification"
           element={authUser ? <NotificationsPage /> : <Navigate to="/" replace />}

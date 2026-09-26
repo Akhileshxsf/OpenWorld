@@ -48,9 +48,8 @@ import {
   FiX, 
   FiMessageCircle,
   FiTrendingUp,
-  FiUsers,
   FiCheck,
-  FiClock
+  FiInfo
 } from "react-icons/fi";
 
 const groqClient = createGroq({
@@ -65,7 +64,6 @@ const useNotificationUpdates = () => {
   const [lastChecked, setLastChecked] = useState(null);
   const [authUser] = useAuthState(auth);
 
-  // Load last checked timestamp from localStorage
   useEffect(() => {
     if (authUser) {
       const saved = localStorage.getItem(`notifications_last_visited_${authUser.uid}`);
@@ -79,7 +77,6 @@ const useNotificationUpdates = () => {
     }
   }, [authUser]);
 
-  // Update last checked timestamp
   const updateLastChecked = useCallback(() => {
     if (authUser) {
       const now = new Date();
@@ -89,7 +86,6 @@ const useNotificationUpdates = () => {
     }
   }, [authUser]);
 
-  // Check for new updates
   const checkForNewUpdates = useCallback((newItems) => {
     if (!lastChecked || !authUser) return false;
     
@@ -128,7 +124,6 @@ const NotificationsPage = () => {
   const navigate = useNavigate();
   const toast = useToast();
 
-  // Notification updates tracking
   const {
     hasNewUpdates,
     updateLastChecked,
@@ -142,36 +137,28 @@ const NotificationsPage = () => {
   const tabFontSize = useBreakpointValue({ base: "xs", md: "sm" });
   const tabPx = useBreakpointValue({ base: 2, md: 4 });
 
-  // Enhanced color scheme - black and blue theme
+  // Color scheme
   const colors = {
     primary: {
-      50: "#E6F3FF",
-      100: "#B3D9FF",
-      200: "#80C0FF",
-      300: "#4DA6FF",
-      400: "#1A8DFF",
-      500: "#0074E8", // Main blue
+      500: "#0074E8",
       600: "#005CB5",
-      700: "#004382",
-      800: "#002B50",
-      900: "#00141F",
     },
     accent: {
-      500: "#00B4D8", // Cyan accent for highlights
+      500: "#00B4D8",
       600: "#0096C7",
     },
     gradient: {
       primary: "linear-gradient(135deg, #0074E8 0%, #00B4D8 100%)",
       hover: "linear-gradient(135deg, #005CB5 0%, #0096C7 100%)",
     },
-    bg: "black", // Background black
+    bg: "black",
     text: "white",
     secondaryText: "gray.400",
     cardBg: "rgba(255, 255, 255, 0.05)",
     border: "whiteAlpha.200",
   };
 
-  // Update last visited when component mounts and on tab change
+  // Update last visited when component mounts
   useEffect(() => {
     if (authUser) {
       updateLastChecked();
@@ -203,7 +190,7 @@ const NotificationsPage = () => {
     };
   }, [authUser]);
 
-  // Enhanced connection requests fetching with update tracking
+  // Enhanced connection requests fetching
   useEffect(() => {
     if (!authUser || loading) return;
 
@@ -228,7 +215,7 @@ const NotificationsPage = () => {
       orderBy("timestamp", "desc")
     );
 
-    // Connections (both directions)
+    // Connections
     const connectionsQueryTo = query(
       offersRef,
       where("type", "==", "connection_request"),
@@ -248,11 +235,11 @@ const NotificationsPage = () => {
     const unsubscribeIncoming = onSnapshot(incomingQuery, (snapshot) => {
       const requests = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate?.() || new Date()
       }));
       setConnectionRequests(requests);
       
-      // Check for new updates
       if (requests.length > 0) {
         checkForNewUpdates(requests);
       }
@@ -261,7 +248,8 @@ const NotificationsPage = () => {
     const unsubscribeSent = onSnapshot(sentQuery, (snapshot) => {
       const sent = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate?.() || new Date()
       }));
       setSentRequests(sent);
     });
@@ -271,7 +259,8 @@ const NotificationsPage = () => {
     const unsubscribeConnectionsTo = onSnapshot(connectionsQueryTo, (snapshot) => {
       connTo = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        connectedAt: doc.data().connectedAt?.toDate?.() || new Date()
       }));
       setConnections([...connTo, ...connFrom]);
     });
@@ -279,7 +268,8 @@ const NotificationsPage = () => {
     const unsubscribeConnectionsFrom = onSnapshot(connectionsQueryFrom, (snapshot) => {
       connFrom = snapshot.docs.map(doc => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
+        connectedAt: doc.data().connectedAt?.toDate?.() || new Date()
       }));
       setConnections([...connTo, ...connFrom]);
     });
@@ -294,13 +284,12 @@ const NotificationsPage = () => {
     };
   }, [authUser, loading, checkForNewUpdates]);
 
-  // Enhanced AI Analysis with better matching
+  // Enhanced AI Analysis
   const runAiAnalysis = useCallback(async () => {
     if (!authUser || !userProfile || allUsers.length === 0) return;
 
     setIsAiAnalyzing(true);
     try {
-      // Filter users who aren't already connected or requested
       const existingConnections = [...connectionRequests, ...sentRequests, ...connections];
       const existingUserIds = new Set(existingConnections.map(conn => 
         conn.fromUserId === authUser.uid ? conn.toUserId : conn.fromUserId
@@ -330,8 +319,7 @@ const NotificationsPage = () => {
             "compatibilityScore": 85,
             "sharedInterests": ["interest1", "interest2"],
             "sharedSkills": ["skill1", "skill2"]
-          },
-          ...more
+          }
         ]
 
         User Profile:
@@ -340,9 +328,8 @@ const NotificationsPage = () => {
         - Skills: ${userProfile.skills?.join(', ') || "No skills listed"}
         - Bio: ${userProfile.bio || "No bio available"}
         - Interests: ${userProfile.interests?.join(', ') || "No interests listed"}
-        - Experience: ${userProfile.experience || "Not specified"}
 
-        Available Users (filtered):
+        Available Users:
         ${availableUsers.map(user => 
           `- ${user.username || "Unknown"} | Profession: ${user.profession || "None"} | 
            Skills: ${user.skills?.join(', ') || "None"} | 
@@ -350,25 +337,15 @@ const NotificationsPage = () => {
            Bio: ${user.bio?.substring(0, 100) || "No bio"}`
         ).join('\n')}
 
-        Scoring Criteria:
-        1. Professional alignment (30%)
-        2. Shared interests (25%)
-        3. Skill compatibility (20%)
-        4. Bio/content synergy (15%)
-        5. Complementary strengths (10%)
-
         Return ONLY the JSON array, nothing else.
       `;
 
       const { text } = await generateText({
-        model: groqClient('llama-3.3-70b-versatile'),
+        model: groqClient('openai/gpt-oss-120b'),
         system: systemPrompt,
         prompt: "Return ONLY a JSON array with user suggestions based on the analysis."
       });
 
-      console.log("AI Raw Response:", text);
-
-      // Enhanced response cleaning
       let cleanedText = text.trim();
       cleanedText = cleanedText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
       const jsonStart = cleanedText.indexOf('[');
@@ -381,7 +358,6 @@ const NotificationsPage = () => {
       try {
         const suggestions = JSON.parse(cleanedText);
         
-        // Enhanced matching with fallback data
         const matchedSuggestions = suggestions
           .map(suggestion => {
             if (!suggestion.username) return null;
@@ -392,14 +368,9 @@ const NotificationsPage = () => {
             
             if (!matchedUser) return null;
 
-            // Calculate enhanced compatibility score
             let calculatedScore = suggestion.compatibilityScore || 50;
-            
-            // Boost score for strong matches
             if (suggestion.sharedInterests?.length > 2) calculatedScore += 10;
             if (suggestion.sharedSkills?.length > 1) calculatedScore += 10;
-            if (suggestion.matchType === 'professional') calculatedScore += 5;
-
             calculatedScore = Math.min(calculatedScore, 95);
 
             return {
@@ -418,7 +389,6 @@ const NotificationsPage = () => {
         
       } catch (parseError) {
         console.error("Error parsing AI suggestions:", parseError);
-        // Enhanced fallback logic
         const fallbackSuggestions = allUsers
           .map(user => {
             let compatibilityScore = 50;
@@ -427,7 +397,6 @@ const NotificationsPage = () => {
             const sharedInterests = [];
             const sharedSkills = [];
 
-            // Calculate compatibility
             if (userProfile.interests && user.interests) {
               sharedInterests.push(...user.interests.filter(interest => 
                 userProfile.interests.includes(interest)
@@ -440,7 +409,6 @@ const NotificationsPage = () => {
               ));
             }
 
-            // Score calculation
             if (user.profession === userProfile.profession) {
               compatibilityScore += 25;
               reason = `Same profession: ${user.profession}`;
@@ -527,7 +495,6 @@ const NotificationsPage = () => {
         isClosable: true,
       });
 
-      // Update last checked to clear new updates indicator
       updateLastChecked();
 
       setTimeout(() => {
@@ -554,7 +521,6 @@ const NotificationsPage = () => {
         description: "Cannot send connection request. Missing user data.",
         status: "error",
         duration: 3000,
-        isClosable: true,
       });
       return;
     }
@@ -566,29 +532,29 @@ const NotificationsPage = () => {
       const connectionData = {
         type: "connection_request",
         fromUserId: authUser.uid,
-        fromUserName: userProfile.username || "Unknown User",
+        fromUserName: userProfile.username || "User",
         fromUserProfession: userProfile.profession || "",
-        fromUserBio: userProfile.bio || "",
+        fromUserBio: userProfile.bio || "", // INTRO FIELD
         fromUserProfilePic: userProfile.profilePicURL || "",
         fromUserSkills: userProfile.skills || [],
         fromUserInterests: userProfile.interests || [],
         
         toUserId: targetUser.id,
-        toUserName: targetUser.username || "Unknown User",
+        toUserName: targetUser.username || "User",
         toUserProfession: targetUser.profession || "",
-        toUserBio: targetUser.bio || "",
+        toUserBio: targetUser.bio || "", // INTRO FIELD
         toUserProfilePic: targetUser.profilePicURL || "",
         toUserSkills: targetUser.skills || [],
         toUserInterests: targetUser.interests || [],
         
         userNeed: customMessage || `Interested in connecting about ${targetUser.profession || 'potential collaboration'}`,
+        connectionReason: `AI-suggested connection based on profile compatibility`, // WHY CONNECT FIELD
         status: "pending",
         timestamp: new Date(),
         lastUpdated: new Date(),
         fromUserAccepted: true,
         toUserAccepted: false,
         chatRoomId: null,
-        batchSize: 1,
         isAiSuggested: targetUser.isAiSuggested || false,
 
         name: `Connection: ${targetUser.username || 'User'}`,
@@ -609,11 +575,9 @@ const NotificationsPage = () => {
         isClosable: true,
       });
 
-      // Update last checked to clear new updates indicator
       updateLastChecked();
 
-      // Remove from suggestions if it was an AI suggestion
-      if (targetUser.isAiSuggested) {
+      if (targetUser.isAiSuggestion) {
         setAiSuggestions(prev => 
           prev.filter(suggestion => suggestion.id !== targetUser.id)
         );
@@ -643,7 +607,6 @@ const NotificationsPage = () => {
         isClosable: true,
       });
 
-      // Update last checked to clear new updates indicator
       updateLastChecked();
 
     } catch (error) {
@@ -683,7 +646,7 @@ const NotificationsPage = () => {
     return 'red';
   };
 
-  // Mobile-optimized Connection Request Item
+  // FIXED: Connection Request Item with proper "Why Connect" and "Intro" display
   const ConnectionRequestItem = ({ connection }) => (
     <MotionBox
       initial={{ opacity: 0, y: 20 }}
@@ -718,16 +681,52 @@ const NotificationsPage = () => {
             <Text fontSize="sm" color={colors.secondaryText} mt={1}>
               {connection.fromUserProfession}
             </Text>
-            <Text fontSize="sm" color="gray.300" mt={1} noOfLines={3}>
+            <Text fontSize="sm" color="gray.300" mt={1} noOfLines={2}>
               {connection.userNeed}
             </Text>
           </Box>
         </Flex>
+        
+        {/* FIXED: Display Intro (Bio) */}
+        {connection.fromUserBio && (
+          <Box>
+            <HStack mb={1}>
+              <FiInfo size={14} color="#00B4D8" />
+              <Text fontSize="sm" color="gray.200" fontWeight="semibold">
+                Introduction:
+              </Text>
+            </HStack>
+            <Text fontSize="sm" color="gray.400" noOfLines={4}>
+              {connection.fromUserBio}
+            </Text>
+          </Box>
+        )}
+        
+        {/* FIXED: Display Why Connect */}
+        {connection.connectionReason && (
+          <Box>
+            <HStack mb={1}>
+              <FiInfo size={14} color="#00B4D8" />
+              <Text fontSize="sm" color="gray.200" fontWeight="semibold">
+                Why Connect:
+              </Text>
+            </HStack>
+            <Text fontSize="sm" color="gray.400" noOfLines={4}>
+              {connection.connectionReason}
+            </Text>
+          </Box>
+        )}
+        
         <HStack justify="space-between" flexWrap="wrap" gap={2}>
           <HStack spacing={1} flexWrap="wrap">
             <Badge colorScheme={connection.isAiSuggested ? "blue" : "gray"} fontSize="xs">
-              {connection.isAiSuggested ? "AI" : "Direct"}
+              {connection.isAiSuggested ? "AI Suggested" : "Direct Request"}
             </Badge>
+            {connection.matchScore && (
+              <Badge colorScheme={getCompatibilityColor(connection.matchScore)} fontSize="xs">
+                {connection.matchScore}% Match
+              </Badge>
+            )}
           </HStack>
           <HStack spacing={2}>
             <IconButton
@@ -755,7 +754,7 @@ const NotificationsPage = () => {
     </MotionBox>
   );
 
-  // Mobile-optimized AI Suggestion Item
+  // AI Suggestion Item
   const AISuggestionItem = ({ suggestion, index }) => (
     <MotionBox
       key={suggestion.id || index}
@@ -797,7 +796,18 @@ const NotificationsPage = () => {
             <Text fontSize="sm" color={colors.secondaryText}>
               {suggestion.profession || "No profession"}
             </Text>
-            <Text fontSize="sm" color={colors.primary[300]} mt={1} noOfLines={3}>
+            {/* FIXED: Display user bio as intro */}
+            {suggestion.bio && (
+              <Box mt={2}>
+                <Text fontSize="sm" color="gray.200" fontWeight="semibold" mb={1}>
+                  About:
+                </Text>
+                <Text fontSize="sm" color="gray.400" noOfLines={3}>
+                  {suggestion.bio}
+                </Text>
+              </Box>
+            )}
+            <Text fontSize="sm" color={colors.primary[300]} mt={2} noOfLines={3}>
               {suggestion.reason}
             </Text>
           </Box>
@@ -859,17 +869,20 @@ const NotificationsPage = () => {
             <Text fontSize="sm" color={colors.secondaryText}>
               {request.toUserProfession}
             </Text>
+            {/* FIXED: Display connection reason for sent requests */}
+            {request.connectionReason && (
+              <Text fontSize="sm" color="gray.400" mt={1} noOfLines={2}>
+                {request.connectionReason}
+              </Text>
+            )}
           </Box>
         </Flex>
         <Flex justify="space-between" align="center">
           <Text fontSize="sm" color="gray.500">
-            Sent {request.timestamp?.toDate?.()?.toLocaleDateString()}
+            Sent {request.timestamp?.toLocaleDateString?.() || new Date().toLocaleDateString()}
           </Text>
           <HStack spacing={2}>
-            <Badge 
-              colorScheme="yellow"
-              fontSize="xs"
-            >
+            <Badge colorScheme="yellow" fontSize="xs">
               Pending
             </Badge>
             <IconButton
@@ -886,67 +899,92 @@ const NotificationsPage = () => {
     </MotionBox>
   );
 
-  // Connection Item - normalize other user
-  const ConnectionItem = ({ connection }) => {
-    const isFromMe = connection.fromUserId === authUser.uid;
-    const otherUser = isFromMe ? {
-      name: connection.toUserName,
-      profession: connection.toUserProfession,
-      profilePic: connection.toUserProfilePic,
-      username: connection.toUserName
-    } : {
-      name: connection.fromUserName,
-      profession: connection.fromUserProfession,
-      profilePic: connection.fromUserProfilePic,
-      username: connection.fromUserName
-    };
+  // Connection Item
+ // In your NotificationsPage.js, update the ConnectionItem component:
 
-    return (
-      <MotionBox
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        bg={colors.cardBg}
-        borderRadius="xl"
-        p={4}
-        boxShadow="0 4px 20px rgba(0, 0, 0, 0.3)"
-        _hover={{ transform: "translateY(-2px)", transition: "0.3s" }}
-      >
-        <Flex direction="column" gap={2}>
-          <Flex align="center" gap={3}>
-            <Avatar
-              size={avatarSize}
-              src={otherUser.profilePic}
-              name={otherUser.name}
-            />
-            <Box flex={1}>
-              <Text fontWeight="bold" color={colors.text} fontSize="md" cursor="pointer" onClick={() => navigateToProfile(otherUser.username)}>
-                {otherUser.name}
-              </Text>
-              <Text fontSize="sm" color={colors.secondaryText}>
-                {otherUser.profession}
-              </Text>
-            </Box>
-          </Flex>
-          <Flex justify="space-between" align="center">
-            <Text fontSize="sm" color="gray.500">
-              Connected {connection.connectedAt?.toDate?.()?.toLocaleDateString()}
-            </Text>
-            <Button
-              size="sm"
-              variant="outline"
-              colorScheme="blue"
-              leftIcon={<FiMessageCircle size={14} />}
-              onClick={() => connection.chatRoomId && navigate(`/messages`)}
-            >
-              Message
-            </Button>
-          </Flex>
-        </Flex>
-      </MotionBox>
-    );
+const ConnectionItem = ({ connection }) => {
+  const isFromMe = connection.fromUserId === authUser.uid;
+  const otherUser = isFromMe ? {
+    name: connection.toUserName,
+    profession: connection.toUserProfession,
+    profilePic: connection.toUserProfilePic,
+    username: connection.toUserName,
+    bio: connection.toUserBio
+  } : {
+    name: connection.fromUserName,
+    profession: connection.fromUserProfession,
+    profilePic: connection.fromUserProfilePic,
+    username: connection.fromUserName,
+    bio: connection.fromUserBio
   };
 
-  // Mobile-optimized tabs configuration
+  return (
+    <MotionBox
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      bg={colors.cardBg}
+      borderRadius="xl"
+      p={4}
+      boxShadow="0 4px 20px rgba(0, 0, 0, 0.3)"
+      _hover={{ transform: "translateY(-2px)", transition: "0.3s" }}
+    >
+      <Flex direction="column" gap={2}>
+        <Flex align="center" gap={3}>
+          <Avatar
+            size={avatarSize}
+            src={otherUser.profilePic}
+            name={otherUser.name}
+            cursor="pointer"
+            onClick={() => navigateToProfile(otherUser.username)}
+          />
+          <Box flex={1}>
+            <Text 
+              fontWeight="bold" 
+              color={colors.text} 
+              fontSize="md" 
+              cursor="pointer" 
+              onClick={() => navigateToProfile(otherUser.username)}
+            >
+              {otherUser.name}
+            </Text>
+            <Text fontSize="sm" color={colors.secondaryText}>
+              {otherUser.profession}
+            </Text>
+            {otherUser.bio && (
+              <Text fontSize="sm" color="gray.400" mt={1} noOfLines={2}>
+                {otherUser.bio}
+              </Text>
+            )}
+          </Box>
+        </Flex>
+        <Flex justify="space-between" align="center">
+          <Text fontSize="sm" color="gray.500">
+            Connected {connection.connectedAt?.toLocaleDateString?.() || new Date().toLocaleDateString()}
+          </Text>
+          <Button
+            size="sm"
+            variant="outline"
+            colorScheme="blue"
+            leftIcon={<FiMessageCircle size={14} />}
+            onClick={() => {
+              if (connection.chatRoomId) {
+                // FIXED: Navigate to the specific chat room
+                navigate(`/messages/${connection.chatRoomId}`);
+              } else {
+                // Fallback: navigate to messages and let it handle the chat
+                navigate('/messages');
+              }
+            }}
+          >
+            Message
+          </Button>
+        </Flex>
+      </Flex>
+    </MotionBox>
+  );
+};
+
+  // Tab configuration
   const tabData = [
     { 
       key: 'requests', 
@@ -1127,7 +1165,7 @@ const NotificationsPage = () => {
                 </VStack>
               ) : connectionRequests.length === 0 ? (
                 <Box textAlign="center" py={12} color={colors.secondaryText}>
-                  <Text fontSize="xl" mb={2}>No connection requests</Text>
+                  <Text fontSize="xl" mb={2}>Chat with Mira</Text>
                   <Text fontSize="lg">Requests will appear here when received</Text>
                 </Box>
               ) : (

@@ -63,7 +63,7 @@ const MessageTab = () => {
   const [currentUser, setCurrentUser] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const { chatId } = useParams();
+  const { chatId } = useParams(); // Get chatId from URL
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const toast = useToast();
@@ -86,14 +86,13 @@ const MessageTab = () => {
     return () => unsubscribe();
   }, [authUser]);
 
-  // Fetch active chats - FIXED VERSION
+  // Fetch active chats
   const fetchActiveChats = useCallback(async () => {
     if (!authUser) return;
 
     try {
       const offersRef = collection(firestore, "offers");
       
-      // Create two separate queries for incoming and outgoing connections
       const incomingQuery = query(
         offersRef,
         where("type", "==", "connection_request"),
@@ -122,7 +121,6 @@ const MessageTab = () => {
             ? chatData.toUserId 
             : chatData.fromUserId;
           
-          // Get other user's profile
           let otherUser = {
             username: "Unknown User",
             profession: "No Profession",
@@ -139,7 +137,6 @@ const MessageTab = () => {
             console.error("Error fetching user profile:", error);
           }
 
-          // Get last message for preview
           let lastMessage = "Start a conversation";
           let lastMessageTime = chatData.connectedAt;
           let unreadCount = 0;
@@ -177,7 +174,6 @@ const MessageTab = () => {
         })
       );
 
-      // Sort by last activity
       const sortedChats = userChats.sort((a, b) => {
         const timeA = a.lastMessageTime?.toDate?.() || new Date(0);
         const timeB = b.lastMessageTime?.toDate?.() || new Date(0);
@@ -187,11 +183,18 @@ const MessageTab = () => {
       setActiveChats(sortedChats);
       setFilteredChats(sortedChats);
 
-      // Set current chat based on URL or first chat
+      // FIXED: Properly handle chat selection based on URL parameter
       if (chatId) {
         const selectedChat = sortedChats.find(chat => chat.chatRoomId === chatId);
-        setCurrentChat(selectedChat || (sortedChats.length > 0 ? sortedChats[0] : null));
+        if (selectedChat) {
+          setCurrentChat(selectedChat);
+        } else {
+          // If specified chat not found, don't automatically select another chat
+          // This prevents the routing issue
+          setCurrentChat(null);
+        }
       } else if (sortedChats.length > 0 && !currentChat) {
+        // Only set first chat as current if no chat is selected and no URL parameter
         setCurrentChat(sortedChats[0]);
       }
 
@@ -206,7 +209,7 @@ const MessageTab = () => {
         duration: 3000,
       });
     }
-  }, [authUser, chatId, currentChat, toast]);
+  }, [authUser, chatId, toast]); // Removed currentChat from dependencies
 
   useEffect(() => {
     fetchActiveChats();
@@ -227,14 +230,13 @@ const MessageTab = () => {
     setFilteredChats(filtered);
   }, [searchQuery, activeChats]);
 
-  // Initialize chat room if it doesn't exist - FIXED VERSION
+  // Initialize chat room if it doesn't exist
   const initializeChatRoom = async (chatRoomId, fromUserId, toUserId) => {
     try {
       const chatRoomRef = doc(firestore, "chatRooms", chatRoomId);
       const chatRoomSnap = await getDoc(chatRoomRef);
       
       if (!chatRoomSnap.exists()) {
-        // Use setDoc instead of updateDoc for new documents
         await setDoc(chatRoomRef, {
           createdAt: serverTimestamp(),
           participants: [fromUserId, toUserId],
@@ -315,13 +317,12 @@ const MessageTab = () => {
     }
   }, [currentChat]);
 
-  // Send message - FIXED VERSION
+  // Send message
   const sendMessage = async () => {
     if (!message.trim() || !currentChat || !authUser || sending) return;
 
     setSending(true);
     try {
-      // Ensure chat room exists before sending message
       if (currentChat.connection) {
         await initializeChatRoom(
           currentChat.chatRoomId,
@@ -344,7 +345,6 @@ const MessageTab = () => {
         messageData
       );
 
-      // Update last activity in the chat room
       try {
         const chatRoomRef = doc(firestore, "chatRooms", currentChat.chatRoomId);
         await updateDoc(chatRoomRef, {
@@ -379,9 +379,11 @@ const MessageTab = () => {
     }
   };
 
+  // FIXED: Select chat function with proper navigation
   const selectChat = (chat) => {
     setCurrentChat(chat);
-    navigate(`/messages`);
+    // Navigate to the specific chat URL
+    navigate(`/messages/${chat.chatRoomId}`);
     if (isMobile) {
       setSidebarOpen(false);
     }
@@ -482,8 +484,8 @@ const MessageTab = () => {
                 p={4}
                 borderBottom="1px solid"
                 borderColor="gray.800"
-                bg={currentChat?.id === chat.id ? "blue.500" : "transparent"}
-                _hover={{ bg: currentChat?.id === chat.id ? "blue.500" : "gray.900" }}
+                bg={currentChat?.chatRoomId === chat.chatRoomId ? "blue.500" : "transparent"}
+                _hover={{ bg: currentChat?.chatRoomId === chat.chatRoomId ? "blue.500" : "gray.900" }}
                 cursor="pointer"
                 onClick={() => selectChat(chat)}
                 align="center"
@@ -523,7 +525,7 @@ const MessageTab = () => {
                   </Text>
                   <Text 
                     fontSize="sm" 
-                    color={currentChat?.id === chat.id ? "whiteAlpha.900" : "gray.500"} 
+                    color={currentChat?.chatRoomId === chat.chatRoomId ? "whiteAlpha.900" : "gray.500"} 
                     isTruncated
                   >
                     {chat.lastMessage}
@@ -573,7 +575,7 @@ const MessageTab = () => {
         maxH="100vh"
         overflow="hidden"
       >
-        {/* Persistent Header - FIXED HEIGHT */}
+        {/* Persistent Header */}
         <Flex 
           p={4} 
           borderBottom="1px solid" 
@@ -664,7 +666,7 @@ const MessageTab = () => {
 
         {currentChat ? (
           <>
-            {/* Messages Area - FIXED SCROLLABLE AREA */}
+            {/* Messages Area */}
             <Box 
               flex={1}
               overflowY="auto" 
@@ -751,7 +753,7 @@ const MessageTab = () => {
               </VStack>
             </Box>
 
-            {/* Message Input - FIXED HEIGHT */}
+            {/* Message Input */}
             <Flex 
               p={4} 
               borderTop="1px solid" 

@@ -22,9 +22,9 @@ import {
   MenuItem,
 } from "@chakra-ui/react";
 import { ArrowForwardIcon, SearchIcon, DeleteIcon } from "@chakra-ui/icons";
-import { FaMicrophone, FaSmile, FaEllipsisV } from "react-icons/fa";
+import { FaMicrophone, FaSmile, FaEllipsisV, FaComment, FaWhatsapp } from "react-icons/fa";
 import { createGroq } from '@ai-sdk/groq';
-import { streamText } from 'ai';
+import { streamText, generateText } from 'ai';
 import { firestore, auth } from "./../firebase/firebase";
 import { 
   doc, 
@@ -85,14 +85,14 @@ const ChatbotPage = () => {
   const inputBorder = "rgba(255, 255, 255, 0.15)";
   const buttonBg = "blue.500";
 
-  // Cycling placeholders
+  // Cycling placeholders - more human-like
   const placeholders = [
-    "connect me with professors working in llm",
-    "connect me with students who are interested in drones",
-    "connect me with startup founder in nitd",
-    "connect me with alumni",
-    "looking for a web developer for my project",
-    "need help with marketing strategy",
+    "Hey! I'm looking to connect with someone who can help me with web development...",
+    "I want to find study partners for machine learning",
+    "Anyone interested in collaborating on a startup idea?",
+    "Looking for a mentor in data science",
+    "I need help with my final year project - anyone experienced in React?",
+    "Want to connect with people who share my interest in AI and robotics"
   ];
   const [placeholderIndex, setPlaceholderIndex] = useState(0);
 
@@ -105,7 +105,6 @@ const ChatbotPage = () => {
       if (savedMessages) {
         try {
           const parsedMessages = JSON.parse(savedMessages);
-          // Convert timestamp strings back to Date objects
           const messagesWithDates = parsedMessages.map(msg => ({
             ...msg,
             timestamp: new Date(msg.timestamp)
@@ -113,18 +112,16 @@ const ChatbotPage = () => {
           setMessages(messagesWithDates);
         } catch (error) {
           console.error("Error loading saved messages:", error);
-          // Initialize with welcome message if loading fails
           setMessages([{
             sender: "bot",
-            text: "Hi, I'm your AI friend! I'm here to help you connect with amazing people. Tell me about yourself and what you're looking for, and I'll find the perfect matches for you!",
+            text: "Hey there! 👋 I'm Mira, your AI friend from OpenWorld. I'm here to help you connect with amazing people around you. Tell me what you're looking for or who you'd like to meet!",
             timestamp: new Date(),
           }]);
         }
       } else {
-        // Initialize with welcome message if no saved messages
         setMessages([{
           sender: "bot",
-          text: "Hi, I'm your AI friend! I'm here to help you connect with amazing people. Tell me about yourself and what you're looking for, and I'll find the perfect matches for you!",
+          text: "Hey there! 👋 I'm Mira, your AI friend from OpenWorld. I'm here to help you connect with amazing people around you. Tell me what you're looking for or who you'd like to meet!",
           timestamp: new Date(),
         }]);
       }
@@ -140,7 +137,7 @@ const ChatbotPage = () => {
     }
   }, [authUser]);
 
-  // Save conversation to localStorage whenever messages or context change
+  // Save conversation to localStorage
   useEffect(() => {
     if (authUser && messages.length > 0) {
       localStorage.setItem(`chatbot_messages_${authUser.uid}`, JSON.stringify(messages));
@@ -170,7 +167,6 @@ const ChatbotPage = () => {
       if (doc.exists()) {
         const profile = doc.data();
         setUserProfile(profile);
-        // Initialize conversation context with user profile
         setConversationContext(prev => ({
           ...prev,
           userInterests: profile.interests || [],
@@ -187,10 +183,9 @@ const ChatbotPage = () => {
         .map((doc) => ({ id: doc.id, ...doc.data() }))
         .filter(user => user.id !== authUser.uid);
       setUsers(usersData);
-      console.log("Available users for matching:", usersData.length);
     });
 
-    // Fetch existing connections to prevent duplicates
+    // Fetch existing connections
     const fetchExistingConnections = async () => {
       try {
         const offersRef = collection(firestore, "offers");
@@ -209,7 +204,6 @@ const ChatbotPage = () => {
           }
         });
         setExistingConnections(connections);
-        console.log("Existing connections:", connections.size);
       } catch (error) {
         console.error("Error fetching existing connections:", error);
       }
@@ -223,27 +217,95 @@ const ChatbotPage = () => {
     };
   }, [authUser]);
 
-  // Update user's AI chat history and summary in Firestore
+  // Enhanced AI-powered connection reason generation
+  const generateConnectionReason = async (currentUser, targetUser, userNeed) => {
+    try {
+      const systemPrompt = `
+        You are an AI matchmaking expert. Analyze two users' profiles and generate a compelling, personalized reason why they should connect.
+
+        Current User Profile:
+        - Name: ${currentUser.username || 'User'}
+        - Profession: ${currentUser.profession || 'Not specified'}
+        - Skills: ${currentUser.skills?.join(', ') || 'No skills listed'}
+        - Interests: ${currentUser.interests?.join(', ') || 'No interests listed'}
+        - Bio: ${currentUser.bio || 'No bio available'}
+        - Goals: ${currentUser.goals?.join(', ') || 'No goals specified'}
+
+        Target User Profile:
+        - Name: ${targetUser.username || 'User'}
+        - Profession: ${targetUser.profession || 'Not specified'}
+        - Skills: ${targetUser.skills?.join(', ') || 'No skills listed'}
+        - Interests: ${targetUser.interests?.join(', ') || 'No interests listed'}
+        - Bio: ${targetUser.bio || 'No bio available'}
+        - Goals: ${targetUser.goals?.join(', ') || 'No goals specified'}
+
+        Connection Context: ${userNeed}
+
+        Your task: Create a compelling 2-3 sentence reason for connection that highlights:
+        1. Specific shared interests, skills, or professional alignment
+        2. Complementary strengths or potential collaboration opportunities
+        3. How this connection could benefit both parties
+
+        Be specific, genuine, and encouraging. Focus on real compatibility factors.
+        Return only the connection reason text, no additional formatting.
+      `;
+
+      const { text } = await generateText({
+        model: groqClient('openai/gpt-oss-120b'),
+        system: systemPrompt,
+        prompt: "Generate a personalized connection reason based on the user profiles above."
+      });
+
+      return text.trim();
+    } catch (error) {
+      console.error("Error generating connection reason:", error);
+      
+      // Fallback reason based on basic profile analysis
+      const sharedInterests = currentUser.interests?.filter(interest => 
+        targetUser.interests?.includes(interest)
+      ) || [];
+      
+      const sharedSkills = currentUser.skills?.filter(skill => 
+        targetUser.skills?.includes(skill)
+      ) || [];
+
+      let fallbackReason = "I think you two should connect because ";
+      
+      if (sharedInterests.length > 0) {
+        fallbackReason += `you share interests in ${sharedInterests.slice(0, 2).join(' and ')}. `;
+      }
+      
+      if (sharedSkills.length > 0) {
+        fallbackReason += `You both have skills in ${sharedSkills.slice(0, 2).join(' and ')}. `;
+      }
+      
+      if (currentUser.profession && targetUser.profession && currentUser.profession === targetUser.profession) {
+        fallbackReason += `You're both ${currentUser.profession}s and could benefit from professional networking.`;
+      } else {
+        fallbackReason += `This connection could lead to valuable collaboration opportunities.`;
+      }
+      
+      return fallbackReason;
+    }
+  };
+
+  // Update user's AI chat history
   const updateUserAIData = async (newMessage, isUserMessage = false) => {
     if (!authUser) return;
 
     try {
       const userRef = doc(firestore, "users", authUser.uid);
-      
-      // Prepare chat history entry - use regular Date instead of serverTimestamp for arrayUnion
       const chatEntry = {
         sender: isUserMessage ? "user" : "ai",
         text: newMessage,
-        timestamp: new Date().toISOString(), // Use ISO string instead of serverTimestamp
+        timestamp: new Date().toISOString(),
       };
 
-      // Update AI chat history
       await updateDoc(userRef, {
         aichathistory: arrayUnion(chatEntry),
-        lastAIChatUpdate: serverTimestamp(), // serverTimestamp can be used here for the field update
+        lastAIChatUpdate: serverTimestamp(),
       });
 
-      // Update AI summary if it's a user message with substantial content
       if (isUserMessage && newMessage.length > 10) {
         await updateAISummary(newMessage);
       }
@@ -252,7 +314,7 @@ const ChatbotPage = () => {
     }
   };
 
-  // Update AI summary based on user messages
+  // Enhanced AI summary extraction with "wanting to help" and "seeking help" detection
   const updateAISummary = async (userMessage) => {
     if (!authUser) return;
 
@@ -268,14 +330,12 @@ const ChatbotPage = () => {
         lastUpdated: new Date().toISOString(),
       };
 
-      // Extract information from user message
       const extractedInfo = extractSummaryInfo(userMessage, currentSummary);
       
-      // Update the AI summary
       await updateDoc(userRef, {
         aisummary: {
           ...extractedInfo,
-          lastUpdated: new Date().toISOString(), // Use ISO string instead of serverTimestamp
+          lastUpdated: new Date().toISOString(),
         },
       });
 
@@ -284,12 +344,12 @@ const ChatbotPage = () => {
     }
   };
 
-  // Enhanced information extraction for AI summary
+  // Enhanced information extraction with "wanting to help" and "seeking help" detection
   const extractSummaryInfo = (userMessage, currentSummary) => {
     const message = userMessage.toLowerCase();
     const newSummary = { ...currentSummary };
 
-    // Enhanced interest extraction
+    // Extract interests
     const interestPatterns = {
       technology: ['tech', 'programming', 'coding', 'software', 'ai', 'ml', 'llm', 'computer', 'developer', 'engineer'],
       business: ['business', 'startup', 'entrepreneur', 'marketing', 'finance', 'investment', 'venture', 'funding'],
@@ -298,7 +358,6 @@ const ChatbotPage = () => {
       science: ['research', 'science', 'engineering', 'physics', 'chemistry', 'biology', 'data science', 'analysis']
     };
 
-    // Extract and update interests
     Object.entries(interestPatterns).forEach(([category, keywords]) => {
       if (keywords.some(keyword => message.includes(keyword)) && !newSummary.interests.includes(category)) {
         newSummary.interests.push(category);
@@ -318,67 +377,38 @@ const ChatbotPage = () => {
       }
     });
 
-    // Extract goals
-    const goalPatterns = [
-      { pattern: 'learn', context: 5 },
-      { pattern: 'build', context: 5 },
-      { pattern: 'create', context: 5 },
-      { pattern: 'start', context: 5 },
-      { pattern: 'achieve', context: 5 },
-      { pattern: 'become', context: 3 },
-      { pattern: 'want to', context: 5 }
+    // ENHANCED: Extract "wanting to help" areas
+    const helpOfferingPatterns = [
+      'i can help', 'i can teach', 'i know about', 'i have experience in', 'i\'m good at',
+      'i can mentor', 'i can guide', 'i can assist with', 'i can support with',
+      'i\'d love to help', 'happy to help', 'willing to help', 'available to help',
+      'i have skills in', 'i have knowledge of', 'i can share', 'i can collaborate on'
     ];
 
-    goalPatterns.forEach(({ pattern, context }) => {
+    helpOfferingPatterns.forEach(pattern => {
       if (message.includes(pattern)) {
-        const goalText = extractContext(message, pattern, context);
-        if (goalText && !newSummary.goals.includes(goalText)) {
-          newSummary.goals.push(goalText);
+        // Extract the area they want to help with
+        const helpArea = extractHelpArea(message, pattern);
+        if (helpArea && !newSummary.wantingToHelpWith.includes(helpArea)) {
+          newSummary.wantingToHelpWith.push(helpArea);
         }
       }
     });
 
-    // Extract seeking help with
+    // ENHANCED: Extract "seeking help" areas
     const helpSeekingPatterns = [
-      'need help with', 'looking for help with', 'want help with', 'seeking assistance with',
-      'need guidance on', 'looking for guidance on', 'want to learn about'
+      'i need help', 'i need assistance', 'looking for help', 'searching for help',
+      'can someone help', 'need guidance', 'need support', 'need advice',
+      'i want to learn', 'i\'m learning', 'beginner in', 'new to',
+      'struggling with', 'having trouble with', 'need mentor', 'looking for mentor'
     ];
 
     helpSeekingPatterns.forEach(pattern => {
       if (message.includes(pattern)) {
-        const helpText = extractContext(message, pattern, 5);
-        if (helpText && !newSummary.seekingHelpWith.includes(helpText)) {
-          newSummary.seekingHelpWith.push(helpText);
-        }
-      }
-    });
-
-    // Extract wanting to help with
-    const helpingPatterns = [
-      'can help with', 'want to help with', 'able to assist with', 'can teach', 'want to mentor',
-      'expert in', 'experienced in', 'knowledgeable about'
-    ];
-
-    helpingPatterns.forEach(pattern => {
-      if (message.includes(pattern)) {
-        const helpText = extractContext(message, pattern, 5);
-        if (helpText && !newSummary.wantingToHelpWith.includes(helpText)) {
-          newSummary.wantingToHelpWith.push(helpText);
-        }
-      }
-    });
-
-    // Extract connection preferences
-    const connectionPatterns = [
-      'connect with', 'looking for', 'want to meet', 'interested in connecting with',
-      'searching for', 'find someone who', 'looking to connect with'
-    ];
-
-    connectionPatterns.forEach(pattern => {
-      if (message.includes(pattern)) {
-        const connectionText = extractContext(message, pattern, 5);
-        if (connectionText && !newSummary.connectionPreferences.includes(connectionText)) {
-          newSummary.connectionPreferences.push(connectionText);
+        // Extract the area they need help with
+        const helpArea = extractHelpArea(message, pattern);
+        if (helpArea && !newSummary.seekingHelpWith.includes(helpArea)) {
+          newSummary.seekingHelpWith.push(helpArea);
         }
       }
     });
@@ -395,16 +425,25 @@ const ChatbotPage = () => {
     return newSummary;
   };
 
-  // Helper function to extract context around a pattern
-  const extractContext = (text, pattern, wordCount) => {
-    const patternIndex = text.indexOf(pattern);
-    if (patternIndex === -1) return null;
+  // Helper function to extract help areas from messages
+  const extractHelpArea = (message, pattern) => {
+    const messageLower = message.toLowerCase();
+    const patternIndex = messageLower.indexOf(pattern);
     
-    const start = Math.max(0, patternIndex - 20);
-    const end = Math.min(text.length, patternIndex + pattern.length + wordCount * 10);
-    const context = text.substring(start, end).trim();
+    if (patternIndex !== -1) {
+      const afterPattern = messageLower.substring(patternIndex + pattern.length);
+      const words = afterPattern.split(/\s+/).slice(0, 5).join(' ').trim();
+      
+      // Clean up the extracted text
+      const cleanArea = words
+        .replace(/[.,!?;:].*$/, '') // Remove everything after punctuation
+        .replace(/\b(with|in|for|about)\b/, '') // Remove common prepositions
+        .trim();
+      
+      return cleanArea.length > 2 ? cleanArea : null;
+    }
     
-    return context.length > 5 ? context : null;
+    return null;
   };
 
   const scrollToBottom = useCallback(() => {
@@ -472,7 +511,7 @@ const ChatbotPage = () => {
   const clearConversation = async () => {
     setMessages([{
       sender: "bot",
-      text: "Hi, I'm your AI friend! I'm here to help you connect with amazing people. Tell me about yourself and what you're looking for, and I'll find the perfect matches for you!",
+      text: "Hey there! 👋 I'm Mira, your AI friend from OpenWorld. I'm here to help you connect with amazing people around you. Tell me what you're looking for or who you'd like to meet!",
       timestamp: new Date(),
     }]);
     setConversationContext({
@@ -482,7 +521,6 @@ const ChatbotPage = () => {
       conversationHistory: []
     });
     
-    // Also clear the AI chat history in Firestore
     if (authUser) {
       try {
         const userRef = doc(firestore, "users", authUser.uid);
@@ -504,72 +542,29 @@ const ChatbotPage = () => {
     });
   };
 
-  // Enhanced user understanding and context extraction
+  // Handle feedback button click
+  const handleFeedbackClick = () => {
+    window.open("https://docs.google.com/forms/d/e/1FAIpQLSdsDTUTGsZyjVVhtm_GZX1ZaMpXsKgpART-RhkYZvBIihk2Mg/viewform?usp=dialog", "_blank");
+  };
+
+  // Enhanced user context extraction
   const extractUserContext = (userMessage, currentContext) => {
     const newContext = { ...currentContext };
     
-    // Extract interests
-    const interestKeywords = {
-      technology: ['tech', 'programming', 'coding', 'software', 'ai', 'ml', 'llm', 'computer'],
-      business: ['business', 'startup', 'entrepreneur', 'marketing', 'finance', 'investment'],
-      education: ['study', 'learn', 'education', 'university', 'college', 'professor', 'student'],
-      creative: ['art', 'design', 'music', 'writing', 'creative', 'photography'],
-      science: ['research', 'science', 'engineering', 'physics', 'chemistry', 'biology']
-    };
-
-    // Extract skills
-    const skillKeywords = [
-      'javascript', 'python', 'react', 'node', 'web development', 'mobile development',
-      'design', 'ui/ux', 'marketing', 'sales', 'writing', 'research', 'data analysis'
-    ];
-
-    // Extract goals
-    const goalKeywords = [
-      'learn', 'build', 'create', 'start', 'find', 'connect', 'collaborate', 
-      'help', 'mentor', 'study', 'work', 'project'
-    ];
-
     const message = userMessage.toLowerCase();
-
-    // Update interests
-    Object.entries(interestKeywords).forEach(([category, keywords]) => {
-      if (keywords.some(keyword => message.includes(keyword))) {
-        if (!newContext.userInterests.includes(category)) {
-          newContext.userInterests.push(category);
-        }
-      }
-    });
-
-    // Update skills
-    skillKeywords.forEach(skill => {
-      if (message.includes(skill) && !newContext.userSkills.includes(skill)) {
-        newContext.userSkills.push(skill);
-      }
-    });
-
-    // Update goals
-    goalKeywords.forEach(goal => {
-      if (message.includes(goal)) {
-        const goalPhrase = message.split(goal)[1]?.split('.')[0]?.split(' ').slice(0, 5).join(' ');
-        if (goalPhrase && !newContext.userGoals.includes(goalPhrase.trim())) {
-          newContext.userGoals.push(goalPhrase.trim());
-        }
-      }
-    });
 
     // Update conversation history
     newContext.conversationHistory = [
-      ...currentContext.conversationHistory.slice(-9), // Keep last 10 messages
+      ...currentContext.conversationHistory.slice(-9),
       { role: 'user', content: userMessage, timestamp: new Date() }
     ];
 
     return newContext;
   };
 
-  // FIXED: Enhanced connection request system with proper matching and real counts
+  // ENHANCED: Connection request system with AI-generated reasons
   const sendConnectionRequests = async (userNeed) => {
     if (isSendingConnections) {
-      console.log("Already sending connections, skipping...");
       return 0;
     }
     
@@ -578,7 +573,6 @@ const ChatbotPage = () => {
     
     try {
       if (!userProfile) {
-        console.error("User profile not loaded");
         toast({
           title: "Profile Not Loaded",
           description: "Please wait for your profile to load",
@@ -588,24 +582,20 @@ const ChatbotPage = () => {
         return 0;
       }
 
-      console.log("Starting connection search for:", userNeed);
-      console.log("Available users:", users.length);
-      console.log("Existing connections:", existingConnections.size);
-
-      // Use AI summary for better matching if available
+      // Use AI summary for better matching
       const aiSummary = userProfile.aisummary || {};
       const matchContext = {
         interests: [...conversationContext.userInterests, ...(aiSummary.interests || [])],
         skills: [...conversationContext.userSkills, ...(aiSummary.skills || [])],
         goals: [...conversationContext.userGoals, ...(aiSummary.goals || [])],
-        connectionPreferences: aiSummary.connectionPreferences || []
+        connectionPreferences: aiSummary.connectionPreferences || [],
+        wantingToHelpWith: aiSummary.wantingToHelpWith || [],
+        seekingHelpWith: aiSummary.seekingHelpWith || []
       };
 
-      // Find ALL potential matches based on user's need and context
+      // Find potential matches using enhanced matching
       const potentialMatches = users.filter(user => {
-        // Skip if already connected
         if (existingConnections.has(user.id)) {
-          console.log(`Skipping ${user.username} - already connected`);
           return false;
         }
 
@@ -618,15 +608,30 @@ const ChatbotPage = () => {
           user.aisummary?.skills?.join(' ') || '',
           user.aisummary?.interests?.join(' ') || '',
           user.goals?.join(' ') || '',
-          user.aisummary?.goals?.join(' ') || ''
+          user.aisummary?.goals?.join(' ') || '',
+          user.aisummary?.wantingToHelpWith?.join(' ') || '',
+          user.aisummary?.seekingHelpWith?.join(' ') || ''
         ].join(' ').toLowerCase();
         
         const needWords = userNeed.toLowerCase().split(' ').filter(word => word.length > 2);
         
-        // Check direct keyword matches with higher sensitivity
         const keywordMatch = needWords.some(word => searchText.includes(word));
         
-        // Enhanced context-based matching
+        // Enhanced matching based on help-seeking and help-offering
+        const helpMatch = 
+          // User is seeking help and target user wants to help in that area
+          (matchContext.seekingHelpWith.some(area => 
+            user.aisummary?.wantingToHelpWith?.some(helpArea => 
+              helpArea.toLowerCase().includes(area.toLowerCase()) || area.toLowerCase().includes(helpArea.toLowerCase())
+            )
+          )) ||
+          // User wants to help and target user is seeking help in that area
+          (matchContext.wantingToHelpWith.some(area => 
+            user.aisummary?.seekingHelpWith?.some(needArea => 
+              needArea.toLowerCase().includes(area.toLowerCase()) || area.toLowerCase().includes(needArea.toLowerCase())
+            )
+          ));
+
         const contextMatch = 
           matchContext.interests.some(interest => 
             user.interests?.includes(interest) || 
@@ -638,32 +643,17 @@ const ChatbotPage = () => {
             user.skills?.includes(skill) ||
             user.aisummary?.skills?.includes(skill) ||
             user.profession?.toLowerCase().includes(skill)
-          ) ||
-          matchContext.goals.some(goal =>
-            user.bio?.toLowerCase().includes(goal) ||
-            user.aisummary?.goals?.some(userGoal => userGoal.toLowerCase().includes(goal)) ||
-            user.goals?.some(userGoal => userGoal.toLowerCase().includes(goal))
           );
 
-        // Calculate match score for filtering
         const matchScore = calculateMatchScore(userProfile, user, userNeed, matchContext);
         
-        // Include if there's any match and score is above threshold
-        const shouldInclude = (keywordMatch || contextMatch) && matchScore > 10;
-        
-        if (shouldInclude) {
-          console.log(`Matched with ${user.username} - Score: ${matchScore}`);
-        }
-        
-        return shouldInclude;
+        return (keywordMatch || contextMatch || helpMatch) && matchScore > 10;
       });
-
-      console.log("Potential matches found:", potentialMatches.length);
 
       if (potentialMatches.length === 0) {
         toast({
           title: "No Matches Found",
-          description: "I couldn't find any matching users. Try adding more details to your profile!",
+          description: "I couldn't find any matching users right now. Try adding more details about what you're looking for!",
           status: "info",
           duration: 4000,
         });
@@ -673,7 +663,6 @@ const ChatbotPage = () => {
       let successfulRequests = 0;
       setConnectionStats({ sent: 0, total: potentialMatches.length });
 
-      // Show initial toast
       toast({
         title: "🔍 Finding Matches",
         description: `Found ${potentialMatches.length} potential connections...`,
@@ -682,10 +671,10 @@ const ChatbotPage = () => {
         isClosable: true,
       });
 
-      // Create connection requests for ALL potential matches
+      // Create connection requests with AI-generated reasons
       for (const match of potentialMatches) {
         try {
-          // Double-check if connection already exists to prevent duplicates
+          // Double-check if connection already exists
           const connectionCheckQuery = query(
             collection(firestore, "offers"),
             where("fromUserId", "==", authUser.uid),
@@ -696,7 +685,6 @@ const ChatbotPage = () => {
           const existingConnectionsSnapshot = await getDocs(connectionCheckQuery);
           
           if (!existingConnectionsSnapshot.empty) {
-            console.log(`Connection already exists with user ${match.username}`);
             continue;
           }
 
@@ -704,23 +692,27 @@ const ChatbotPage = () => {
           const offerRef = doc(firestore, "offers", offerId);
           
           const matchScore = calculateMatchScore(userProfile, match, userNeed, matchContext);
-          
+
+          // ENHANCED: Generate AI-powered connection reason
+          const connectionReason = await generateConnectionReason(userProfile, match, userNeed);
+
+          // Create connection request
           await setDoc(offerRef, {
             // Connection data
             type: "connection_request",
             fromUserId: authUser.uid,
-            fromUserName: userProfile.username || "Unknown User",
+            fromUserName: userProfile.username || "User",
             fromUserProfession: userProfile.profession || "",
-            fromUserBio: userProfile.bio || "",
+            fromUserBio: userProfile.bio || "", // INTRO FIELD
             fromUserProfilePic: userProfile.profilePicURL || "",
-            fromUserInterests: matchContext.interests,
-            fromUserSkills: matchContext.skills,
+            fromUserInterests: userProfile.interests || [],
+            fromUserSkills: userProfile.skills || [],
             fromUserAISummary: aiSummary,
             
             toUserId: match.id,
-            toUserName: match.username || "Unknown User",
+            toUserName: match.username || "User",
             toUserProfession: match.profession || "",
-            toUserBio: match.bio || "",
+            toUserBio: match.bio || "", // INTRO FIELD
             toUserProfilePic: match.profilePicURL || "",
             toUserInterests: match.interests || [],
             toUserSkills: match.skills || [],
@@ -728,11 +720,12 @@ const ChatbotPage = () => {
             
             // Request details
             userNeed: userNeed,
+            connectionReason: connectionReason, // AI-GENERATED WHY CONNECT FIELD
             aiContext: matchContext.goals.slice(0, 3),
             status: "pending",
             timestamp: serverTimestamp(),
             lastUpdated: serverTimestamp(),
-            fromUserAccepted: false,
+            fromUserAccepted: true,
             toUserAccepted: false,
             chatRoomId: null,
             isAiSuggested: true,
@@ -740,42 +733,30 @@ const ChatbotPage = () => {
 
             // Offer collection required fields
             name: `AI Connection: ${userProfile.username} → ${match.username}`,
-            description: `${userProfile.username} wants to connect: ${userNeed.substring(0, 100)}...`,
+            description: `${userProfile.username} wants to connect: ${userNeed.substring(0, 100)}`,
             contact: userProfile.email || "",
             offerType: "AI_Connection",
             joins: [],
             userId: authUser.uid
           });
 
-          // Add to existing connections to prevent duplicates in this session
           setExistingConnections(prev => new Set([...prev, match.id]));
           successfulRequests++;
           setConnectionStats(prev => ({ ...prev, sent: successfulRequests }));
 
-          console.log(`✅ Connection sent to ${match.username}`);
+          console.log(`✅ Connection sent to ${match.username} with AI-generated reason`);
 
-          // Show individual connection toast
-          toast({
-            title: "Connection Sent",
-            description: `Sent to ${match.username}`,
-            status: "success",
-            duration: 1500,
-            isClosable: true,
-          });
-
-          // Small delay to prevent overwhelming the database
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise(resolve => setTimeout(resolve, 100));
 
         } catch (error) {
-          console.error(`❌ Failed to create connection for user ${match.username}:`, error);
+          console.error(`Failed to create connection:`, error);
         }
       }
 
-      // Final success toast
       if (successfulRequests > 0) {
         toast({
           title: "🎉 Connections Sent!",
-          description: `Successfully sent ${successfulRequests} connection requests!`,
+          description: `Successfully sent ${successfulRequests} connection requests with personalized introductions!`,
           status: "success",
           duration: 5000,
           isClosable: true,
@@ -789,7 +770,6 @@ const ChatbotPage = () => {
         });
       }
 
-      console.log(`Total connections sent: ${successfulRequests}`);
       return successfulRequests;
     } catch (error) {
       console.error("Error sending connection requests:", error);
@@ -810,7 +790,7 @@ const ChatbotPage = () => {
   const calculateMatchScore = (user1, user2, userNeed, matchContext) => {
     let score = 0;
     
-    // Profession match (strong weight)
+    // Profession match
     if (user1.profession && user2.profession && 
         user1.profession.toLowerCase() === user2.profession.toLowerCase()) {
       score += 40;
@@ -828,7 +808,24 @@ const ChatbotPage = () => {
     ).length;
     score += commonInterests * 10;
     
-    // Bio keyword match with user need
+    // Help-seeking and help-offering match (NEW)
+    const helpMatchScore = 
+      // User1 seeking help + User2 wanting to help
+      matchContext.seekingHelpWith.filter(need => 
+        user2.aisummary?.wantingToHelpWith?.some(help => 
+          help.toLowerCase().includes(need.toLowerCase()) || need.toLowerCase().includes(help.toLowerCase())
+        )
+      ).length * 25 +
+      // User1 wanting to help + User2 seeking help
+      matchContext.wantingToHelpWith.filter(help => 
+        user2.aisummary?.seekingHelpWith?.some(need => 
+          need.toLowerCase().includes(help.toLowerCase()) || help.toLowerCase().includes(need.toLowerCase())
+        )
+      ).length * 25;
+    
+    score += helpMatchScore;
+    
+    // Bio keyword match
     const needWords = userNeed.toLowerCase().split(' ').filter(word => word.length > 3);
     const bioMatch = needWords.filter(word => 
       user2.bio?.toLowerCase().includes(word) ||
@@ -838,13 +835,6 @@ const ChatbotPage = () => {
     ).length;
     score += bioMatch * 12;
 
-    // Goals alignment
-    const commonGoals = matchContext.goals.filter(goal => 
-      user2.goals?.some(userGoal => userGoal.toLowerCase().includes(goal.toLowerCase())) ||
-      user2.aisummary?.goals?.some(userGoal => userGoal.toLowerCase().includes(goal.toLowerCase()))
-    ).length;
-    score += commonGoals * 8;
-    
     return Math.min(score, 100);
   };
 
@@ -867,16 +857,28 @@ const ChatbotPage = () => {
     setIsBotTyping(true);
     scrollToBottom();
 
-    // Update user's AI data in Firestore
     await updateUserAIData(currentInput, true);
 
-    // Update conversation context
     const updatedContext = extractUserContext(currentInput, conversationContext);
     setConversationContext(updatedContext);
 
     try {
       const systemPrompt = `
-        You are Mira, an AI friend from OpenWorld. Be warm, empathetic, and genuinely interested in helping users connect with others.
+        You are Mira, an AI friend from OpenWorld. You're talking to students and young professionals. Be warm, conversational, and genuinely human-like.
+
+        CRITICAL GUIDELINES:
+        - Speak like a real human friend, not a formal assistant. Use casual language, emojis occasionally, and be relatable.
+        - Primary flow: Start by asking "Whom do you want to reach out to and why?" to understand their connection needs.
+        - After the user responds to that, ask for some details about their interests, skills, and whom they can help. Store this in AI summary (automatically handled).
+        - Then guide them: "Just use 'connect me' keyword with whom and why, and I'll initiate matchmaking."
+        - Suggest updating profile: "For better matchmaking, update your profile with more details!"
+        - Conversation motive: Focus on learning what they're interested in and working on naturally, without too many questions.
+        - Encourage using "I can help X kind of people" keyword: "Tell me using 'I can help X kind of people' so I can send you relevant notifications about people who need that help."
+        - Extract and remember "seeking help" or "wanting to help" areas naturally.
+        - Keep responses concise, engaging, and simple (1-3 sentences max). Show empathy and excitement.
+        - Only trigger connections when the user uses "connect me" (e.g., "connect me with developers because...").
+        - When detecting "I can help X", acknowledge and say you'll send relevant notifications.
+        - Always remind users to use keywords as usual in the flow.
 
         USER CONTEXT:
         - Interests: ${updatedContext.userInterests.join(', ')}
@@ -884,24 +886,12 @@ const ChatbotPage = () => {
         - Goals: ${updatedContext.userGoals.join(', ')}
         - Recent conversation: ${updatedContext.conversationHistory.slice(-3).map(msg => msg.content).join(' | ')}
 
-        YOUR APPROACH:
-        1. FIRST, understand the user deeply - ask follow-up questions about their interests, goals, and needs
-        2. Build rapport by showing genuine interest in their aspirations
-        3. When they mention connection needs, acknowledge and suggest you'll find matches
-        4. DO NOT promise specific numbers of connections - say "I'll find relevant people" instead of "I'll send to X people"
-        5. Always be encouraging and supportive
+        CONNECTION GUIDANCE:
+        - Trigger matchmaking only on "connect me".
+        - Automatically extract info for better matches and notifications.
 
-        CONNECTION PROCESS:
-        - When user mentions connection needs, say: "I'll help you find relevant people!"
-        - After sending: "I've sent connection requests to people who match your interests!"
-        - Explain: "They'll receive notifications and can view your profile"
-
-        IMPORTANT: NEVER mention specific numbers like "10 people" or "20 people" - this may not be accurate.
-        Instead say: "I've sent connection requests" or "I'm finding matches for you"
-
-        Tone: Warm, curious, genuinely helpful. Ask thoughtful follow-up questions.
-        Keep responses conversational and under 150 words.
-        Use the context to personalize your responses.
+        Tone: Friendly, casual, supportive, like a peer mentor. Make the user feel heard and excited about connecting.
+        Style: Use contractions, occasional emojis, and natural speech patterns for an engaging, simple chat.
       `;
 
       const conversationHistory = [...messages, newMessage]
@@ -912,9 +902,9 @@ const ChatbotPage = () => {
       const fullPrompt = `${systemPrompt}\n\nCurrent conversation:\n${conversationHistory}\n\nUser: ${currentInput}\n\nMira:`;
 
       const { textStream } = await streamText({
-        model: groqClient('llama-3.3-70b-versatile'),
+        model: groqClient('openai/gpt-oss-120b'),
         prompt: fullPrompt,
-        temperature: 0.7,
+        temperature: 0.8, // Slightly higher temperature for more human-like responses
       });
 
       let streamedText = '';
@@ -931,38 +921,80 @@ const ChatbotPage = () => {
         scrollToBottom();
       }
 
-      // Update AI data with bot response
       await updateUserAIData(streamedText, false);
 
-      // Check if user wants to connect with someone - ENHANCED detection
+      // Enhanced connection detection with natural language processing
       const connectionKeywords = [
-        'connect', 'find', 'looking for', 'need help with', 'searching for', 
-        'want to talk to', 'looking to connect', 'want to find', 'need someone who',
-        'connect me with', 'find me a', 'looking for someone', 'need a', 'who can help',
-        'introduce me to', 'know anyone who', 'find people', 'match me with', 'suggest someone',
-        'recommend people', 'help me find', 'looking to meet', 'want to connect with', 'students',
-        'professors', 'developers', 'designers', 'mentors', 'collaborators'
+        'connect me with', 'connect me to', 'connect me'
+      ];
+
+      const helpOfferingKeywords = [
+        'i can help', 'i can teach', 'i know about', 'i have experience',
+        'i\'m good at', 'i can mentor', 'happy to help', 'willing to help'
+      ];
+
+      const helpSeekingKeywords = [
+        'i need help', 'need assistance', 'looking for help', 'can someone help',
+        'need guidance', 'struggling with', 'want to learn', 'new to'
       ];
 
       const wantsConnection = connectionKeywords.some(keyword => 
         currentInput.toLowerCase().includes(keyword)
       );
 
-      // Send connections immediately when detected
-      if (wantsConnection && !isSendingConnections) {
-        console.log("Connection intent detected, sending requests...");
+      const isOfferingHelp = helpOfferingKeywords.some(keyword =>
+        currentInput.toLowerCase().includes(keyword)
+      );
+
+      const isSeekingHelp = helpSeekingKeywords.some(keyword =>
+        currentInput.toLowerCase().includes(keyword)
+      );
+
+      // Provide feedback about extracted help areas
+      if ((isOfferingHelp || isSeekingHelp) && !wantsConnection) {
+        const aiSummary = userProfile?.aisummary || {};
+        const updatedSummary = extractSummaryInfo(currentInput, aiSummary);
         
-        // Send connection requests in background
+        if (isOfferingHelp && updatedSummary.wantingToHelpWith.length > 0) {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                sender: "bot",
+                text: `That's awesome that you can help with ${updatedSummary.wantingToHelpWith.slice(-1)[0]}! 🎉 I'll remember this for future matches and notify you about people who need it.`,
+                timestamp: new Date(),
+              },
+            ]);
+            scrollToBottom();
+          }, 500);
+        }
+
+        if (isSeekingHelp && updatedSummary.seekingHelpWith.length > 0) {
+          setTimeout(() => {
+            setMessages((prev) => [
+              ...prev,
+              {
+                sender: "bot",
+                text: `Got it! You're looking for help with ${updatedSummary.seekingHelpWith.slice(-1)[0]}. I'll keep an eye out and notify you about relevant people. When ready, say 'connect me'! 👀`,
+                timestamp: new Date(),
+              },
+            ]);
+            scrollToBottom();
+          }, 500);
+        }
+      }
+
+      // Trigger connection matching only on "connect me"
+      if (wantsConnection && !isSendingConnections) {
         const matchesSent = await sendConnectionRequests(currentInput);
         
-        // Add follow-up message after connections are sent
         setTimeout(() => {
           if (matchesSent > 0) {
             setMessages((prev) => [
               ...prev,
               {
                 sender: "bot",
-                text: `🎉 Great! I've sent connection requests to people who match your interests! They'll receive notifications and can view your profile. \n\nCheck your notifications tab for responses! What else can I help you with?`,
+                text: `🎉 Awesome! I just sent ${matchesSent} personalized connection requests to people who match what you're looking for! Each request includes a custom message explaining why you should connect based on shared interests and goals. Check your notifications for responses!`,
                 timestamp: new Date(),
               },
             ]);
@@ -971,7 +1003,7 @@ const ChatbotPage = () => {
               ...prev,
               {
                 sender: "bot",
-                text: `I'm keeping an eye out for great matches for you! In the meantime, you might want to add more details to your profile - it helps me find better connections. What specific areas are you most interested in?`,
+                text: `I'm keeping an eye out for great matches for you! 👀 In the meantime, you might want to add more details to your profile - it helps me find better connections and create more personalized introductions.`,
                 timestamp: new Date(),
               },
             ]);
@@ -983,15 +1015,15 @@ const ChatbotPage = () => {
     } catch (error) {
       console.error("AI Response Error:", error);
       toast({ 
-        title: "AI Response Failed", 
-        description: "Couldn't generate a response. Please try again.", 
+        title: "Oops, something went wrong!", 
+        description: "Couldn't generate a response. Let's try that again? 😊", 
         status: "error",
         duration: 5000,
         isClosable: true 
       });
       setMessages((prev) => [...prev, { 
         sender: "bot", 
-        text: "Oops, I hit a snag! Let's try that again. What were we talking about? 😊",
+        text: "Hmm, I hit a snag there! 😅 What were we talking about again?",
         timestamp: new Date() 
       }]);
     } finally {
@@ -1063,64 +1095,108 @@ const ChatbotPage = () => {
     <Flex
       direction="column"
       minH="100vh"
-      w="100vw"
+      w="full"
       bg={bgColor}
       position="relative"
       overflow="hidden"
     >
-      {/* Header with context info and menu */}
-      <Flex p={4} borderBottom={`1px solid ${cardBorder}`} align="center" justify="space-between">
-        <HStack>
-          <Avatar
-            size="sm"
-            name="Mira"
-            src="/aiavatar.jpeg"
-          />
-          <Box>
-            <Text color={textColor} fontWeight="bold">Mira</Text>
-            <Text color={secondaryTextColor} fontSize="sm">Your AI Friend From OpenWorld</Text>
-          </Box>
-        </HStack>
-        <HStack>
-          {conversationContext.userInterests.length > 0 && (
-            <HStack display={{ base: "none", md: "flex" }}>
-              <Badge colorScheme="blue" fontSize="xs">
-                {conversationContext.userInterests.length} interests
-              </Badge>
-              <Badge colorScheme="green" fontSize="xs">
-                {conversationContext.userSkills.length} skills
-              </Badge>
-            </HStack>
-          )}
-          {isSendingConnections && (
-            <Badge colorScheme="purple" fontSize="xs">
-              Sending {connectionStats.sent}/{connectionStats.total}
-            </Badge>
-          )}
-          <Menu>
-            <MenuButton
-              as={IconButton}
-              icon={<FaEllipsisV />}
-              variant="ghost"
-              color={textColor}
-              _hover={{ bg: inputBg }}
+      <Box 
+        position="fixed" 
+        top={-1} 
+        left={{ base: 0, md: "150px" }} 
+        w={{ base: "100vw", md: "calc(105vw - 250px)" }} 
+        zIndex={10} 
+        bg={bgColor} 
+        borderBottom={`1px solid ${cardBorder}`}
+      >
+        <Flex p={4} align="center" justify="space-between">
+          <HStack>
+            <Avatar
+              size="sm"
+              name="Mira"
+              src="/aiavatar.jpeg"
             />
-            <MenuList bg={cardBg} borderColor={cardBorder}>
-              <MenuItem 
-                icon={<DeleteIcon />} 
-                onClick={clearConversation}
-                bg={cardBg}
-                _hover={{ bg: inputBg }}
+            <Box>
+              <Text color={textColor} fontWeight="bold">Mira</Text>
+              <Text color={secondaryTextColor} fontSize="sm">Your AI Friend From OpenWorld</Text>
+            </Box>
+          </HStack>
+          <HStack>
+            {conversationContext.userInterests.length > 0 && (
+              <HStack display={{ base: "none", md: "flex" }}>
+                <Badge colorScheme="blue" fontSize="xs">
+                  {conversationContext.userInterests.length} interests
+                </Badge>
+                <Badge colorScheme="green" fontSize="xs">
+                  {conversationContext.userSkills.length} skills
+                </Badge>
+                {userProfile?.aisummary?.wantingToHelpWith?.length > 0 && (
+                  <Badge colorScheme="purple" fontSize="xs">
+                    Can help with {userProfile.aisummary.wantingToHelpWith.length} areas
+                  </Badge>
+                )}
+              </HStack>
+            )}
+            {isSendingConnections && (
+              <Badge colorScheme="purple" fontSize="xs">
+                Sending {connectionStats.sent}/{connectionStats.total}
+              </Badge>
+            )}
+            <Menu>
+              <MenuButton
+                as={IconButton}
+                icon={<FaEllipsisV />}
+                variant="ghost"
                 color={textColor}
-              >
-                Clear Conversation
-              </MenuItem>
-            </MenuList>
-          </Menu>
-        </HStack>
-      </Flex>
+                _hover={{ bg: inputBg }}
+              />
+              <MenuList bg="black" borderColor={cardBorder}>
+                <MenuItem 
+                  icon={<DeleteIcon />} 
+                  onClick={clearConversation}
+                  bg="black"
+                  _hover={{ bg: inputBg }}
+                  color={textColor}
+                >
+                  Clear Conversation
+                </MenuItem>
+                <MenuItem 
+                  icon={<FaComment />} 
+                  onClick={handleFeedbackClick}
+                  bg="black"
+                  _hover={{ bg: inputBg }}
+                  color={textColor}
+                >
+                  Feedback
+                </MenuItem>
+                {import.meta.env.VITE_WHATSAPP_NUMBER && (
+                  <MenuItem
+                    icon={<FaWhatsapp />}
+                    as="a"
+                    href={`https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    bg="black"
+                    _hover={{ bg: inputBg }}
+                    color={textColor}
+                  >
+                    Continue on WhatsApp
+                  </MenuItem>
+                )}
+              </MenuList>
+            </Menu>
+          </HStack>
+        </Flex>
+      </Box>
 
-      <Flex direction="column" flex={1} p={{ base: 3, md: 5 }} pt={4} pb={{ base: 20, md: 5 }} overflow="hidden">
+      <Flex 
+        direction="column" 
+        flex={1} 
+        p={{ base: 3, md: 5 }} 
+        pt={{ base: "70px", md: "70px" }} 
+        pb={{ base: 20, md: 5 }} 
+        overflow="hidden"
+      >
         <MotionFlex
           flex={1}
           direction="column"

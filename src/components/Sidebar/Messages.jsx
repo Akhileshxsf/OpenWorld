@@ -77,7 +77,7 @@ const useMessageCount = () => {
 };
 
 const Messages = () => {
-  const commonIconSize = { base: 30, md: 25 };
+  const commonIconSize = 25; // Changed to match other components
   const { pathname } = useLocation();
   const isActive = pathname === '/messages';
   const { unreadCount, hasNewUpdates, updateLastChecked } = useMessageCount();
@@ -134,8 +134,8 @@ const Messages = () => {
         <Box position="relative" display="inline-block">
           <BiMessageRounded
             style={{
-              width: commonIconSize.base || commonIconSize,
-              height: commonIconSize.base || commonIconSize,
+              width: commonIconSize,
+              height: commonIconSize,
               filter: hasNewUpdates ? `drop-shadow(0 0 5px rgba(255, 65, 108, 0.8))` : 'none',
               animation: hasNewUpdates ? `${pulseGlow} 2s infinite` : 'none',
             }}

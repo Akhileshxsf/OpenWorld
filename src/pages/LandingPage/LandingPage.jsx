@@ -5,8 +5,61 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Box, Heading, Text, Flex, VStack, Button, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, SimpleGrid, Card, CardBody, CardHeader, List, ListItem, ListIcon, Link, Image, Container } from '@chakra-ui/react';
 import { CheckIcon } from '@chakra-ui/icons';
 
+const COMPANY_LEGAL_NAME = "HARINATH MECHTECH INNOVATIONS PRIVATE LIMITED";
+
+const Header = () => {
+  return (
+    <Box
+      as="header"
+      position="sticky"
+      top={0}
+      zIndex={20}
+      bg="white"
+      borderBottom="1px solid"
+      borderColor="gray.200"
+      shadow="sm"
+    >
+      <Container maxW="container.xl" px={{ base: 4, md: 16 }} py={{ base: 3, md: 3.5 }}>
+        <Flex
+          align="center"
+          justify="space-between"
+          gap={4}
+          direction={{ base: "column", md: "row" }}
+        >
+          <Flex align="center" gap={3}>
+            <Image src="/logohero.jpeg" alt="OpenWorldX" w={9} h={9} objectFit="contain" />
+            <Text fontWeight="bold" color="gray.900" fontSize={{ base: "md", md: "lg" }}>
+              OpenWorldX
+            </Text>
+          </Flex>
+          <Text
+            as="p"
+            fontSize={{ base: "10px", sm: "xs", md: "sm" }}
+            fontWeight="bold"
+            letterSpacing="0.02em"
+            color="gray.800"
+            textAlign={{ base: "center", md: "right" }}
+            textTransform="none"
+            lineHeight="1.4"
+          >
+            {COMPANY_LEGAL_NAME}
+          </Text>
+        </Flex>
+      </Container>
+    </Box>
+  );
+};
+
 const Hero = () => {
   const heroRef = useRef(null);
+  const videoRef = useRef(null);
+
+  // Attempt to play video with sound
+  const handleVideoLoad = () => {
+    if (videoRef.current) {
+      videoRef.current.play().catch(e => console.log("Auto-play with sound prevented by browser:", e));
+    }
+  };
 
   return (
     <Box 
@@ -22,99 +75,162 @@ const Hero = () => {
         <Flex 
           align="center" 
           justify="space-between" 
-          gap={16} 
+          gap={12} 
           direction={{ base: 'column', lg: 'row' }}
-          py={16}
+          py={12}
         >
           <VStack 
             maxW="2xl" 
             align={{ base: 'center', lg: 'flex-start' }} 
             textAlign={{ base: 'center', lg: 'left' }} 
-            spacing={6}
+            spacing={5}
             flex={1}
           >
-            <Flex align="center" gap={6} direction={{ base: 'row', md: 'row' }}>
+            <Flex align="center" gap={4} direction={{ base: 'row', md: 'row' }}>
               <Image 
                 src="/logohero.jpeg" 
                 alt="Logo" 
-                w={{ base: 24, md: 32 }} 
-                h={{ base: 24, md: 32 }} 
-                 
-                
+                w={{ base: 20, md: 28 }} 
+                h={{ base: 20, md: 28 }} 
+                objectFit="contain"
+                bg="transparent"
               />
-              <Heading 
-                as="h1" 
-                size={{ base: '2xl', md: '4xl' }} 
-                fontWeight="extrabold" 
-                lineHeight="tight" 
-                bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
-                bgClip="text"
-                textAlign={{ base: 'center', md: 'left' }}
-              >
-                OpenWorld
-                <br />
-                <Text as="span" display="inline-block" mt={2}>
-                  TradeTime
+              <Box>
+                <Heading 
+                  as="h1" 
+                  fontSize={{ base: '3xl', md: '5xl' }} 
+                  fontWeight="extrabold" 
+                  lineHeight="1.2" 
+                  bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
+                  bgClip="text"
+                >
+                  OpenWorldX
+                </Heading>
+                <Text 
+                  fontSize={{ base: 'xl', md: '2xl' }} 
+                  fontWeight="semibold" 
+                  color="gray.600"
+                  mt={1}
+                >
+                  The AI Network
                 </Text>
-              </Heading>
+              </Box>
             </Flex>
-            <Text fontSize={{ base: 'lg', md: 'xl' }} color="gray.700" fontWeight="medium" mt={4}>
-              We are always surrounded by the same 4 people everyday. Current social media also connects us with the same set of people we already know, and connecting with someone out of our network is really hard and sucks.
+            <Text fontSize={{ base: 'lg', md: 'xl' }} color="gray.700" fontWeight="medium" lineHeight="1.6" mt={4}>
+              We are always surrounded by the same 4 people everyday. Current social media also connects us with the same set of people we already know, and connecting with someone out of our network is really hard.
             </Text>
-            <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600" mt={2}>
+            <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600">
               We are solving it in a new way that has never been done before.
             </Text>
             <Flex 
               direction={{ base: 'column', sm: 'row' }} 
               gap={4} 
-              mt={8} 
+              mt={6} 
               justify={{ base: 'center', lg: 'flex-start' }}
               w="full"
             >
               <Button 
                 as={RouterLink} 
                 to="/auth" 
-                bgGradient="linear(to-r, blue.600, cyan.500)" 
+                bgGradient="linear(to-r, blue.600, blue.500)" 
                 color="white" 
                 px={8} 
-                py={4}
+                py={6}
                 size="lg"
-                borderRadius="xl" 
-                fontWeight="semibold" 
+                fontSize="md"
+                borderRadius="full" 
+                fontWeight="bold" 
                 shadow="lg" 
-                _hover={{ shadow: 'xl', transform: 'scale(1.05)' }}
+                _hover={{ shadow: 'xl', transform: 'translateY(-2px)', bgGradient: "linear(to-r, blue.700, blue.600)" }}
                 transition="all 0.3s"
               >
                 Get Started
               </Button>
+              {import.meta.env.VITE_WHATSAPP_NUMBER && (
+                <Button
+                  as="a"
+                  href={`https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira")}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  bg="#25D366"
+                  color="white"
+                  px={8}
+                  py={6}
+                  size="lg"
+                  fontSize="md"
+                  borderRadius="full"
+                  fontWeight="bold"
+                  shadow="lg"
+                  _hover={{ shadow: "xl", transform: "translateY(-2px)", bg: "#1EBE57" }}
+                  transition="all 0.3s"
+                >
+                  Chat on WhatsApp
+                </Button>
+              )}
+              <Button 
+                as="a"
+                href="https://play.google.com/store/apps/details?id=com.openworldx.openworld"
+                target="_blank"
+                rel="noopener noreferrer"
+                bg="white" 
+                color="gray.800" 
+                px={6} 
+                py={6}
+                size="lg"
+                fontSize="md"
+                borderRadius="full" 
+                fontWeight="bold" 
+                shadow="md"
+                border="1px solid"
+                borderColor="gray.300"
+                _hover={{ shadow: 'lg', transform: 'translateY(-2px)', bg: 'gray.50' }}
+                transition="all 0.3s"
+              >
+                <Image 
+                  src="/googlr play.jpeg" 
+                  alt="Google Play" 
+                  h={8} 
+                  objectFit="contain"
+                />
+              </Button>
             </Flex>
           </VStack>
           <Flex 
-            mt={{ base: 12, lg: 0 }} 
-            h={{ base: '300px', md: '480px', lg: '520px' }} 
+            mt={{ base: 10, lg: 0 }} 
             flex={1} 
             justify="center" 
             align="center"
-            maxW={{ base: '100%', lg: '50%' }}
+            maxW={{ base: '100%', lg: '45%' }}
           >
-            <Box 
-              as="video" 
-              src="/video.mp4" 
-              autoPlay 
-              loop 
-              muted 
-              playsInline 
-              h="100%"
-              w="auto" 
-              maxW="100%"
-              borderRadius="2xl" 
-              border="1px solid" 
-              borderColor="gray.200"
-              shadow="2xl" 
-              objectFit="cover"
+            <Box
+              position="relative"
+              w="100%"
+              borderRadius="3xl"
+              overflow="hidden"
+              boxShadow="2xl"
+              border="1px solid"
+              borderColor="white"
+              bg="black"
             >
-              <source src="/video.mp4" type="video/mp4" />
-              Your browser does not support the video tag.
+              <Box
+                as="video"
+                ref={videoRef}
+                src="/Mira Video updated.mp4"
+                autoPlay
+                loop
+                playsInline
+                controls
+                onLoadedData={handleVideoLoad}
+                w="100%"
+                h="auto"
+                objectFit="cover"
+                sx={{
+                  aspectRatio: "16/9",
+                }}
+              >
+                <source src="/Mira Video updated.mp4" type="video/mp4" />
+                Your browser does not support the video tag.
+              </Box>
             </Box>
           </Flex>
         </Flex>
@@ -125,18 +241,23 @@ const Hero = () => {
 
 const modes = [
   {
-    title: "AI Friend",
-    description: "Everyone will have their AI friend which chats with them and understands them. Whenever you ask it to connect with someone, it chats with other AI friends in the network and finds who might help you and sends them notification introducing you. First it sends to 5 people, then 10, and so on until one accepts.",
+    title: "AI Friend - Mira",
+    description: "Everyone has their own AI friend Mira who chats with them and understands them. Whenever you ask Mira to connect with someone, it chats with other AI friends in the network and finds who might help you, sending them a notification introducing you. First it sends to 5 people, then 10, and so on until one accepts.",
+    gradient: "linear(to-br, blue.500, indigo.500, purple.600)",
+  },
+  {
+    title: "Blasts",
+    description: "When you have a message or request that needs quick answers, Mira can blast it to relevant people in the network. Your AI analyzes your message and finds the most relevant people who can help, then shares it with them. You get instant responses from multiple people who are interested, making connections faster than ever before.",
     gradient: "linear(to-br, blue.500, indigo.500, purple.600)",
   },
   {
     title: "Notifications",
-    description: "You will receive notifications from AI where it introduces you to people whom you can help. You can judge them by seeing their profile, and there is an accept button. When you click on the accept button, the other person also gets a notification that you are willing to help. He will also see your profile and judge you, and if he also clicks the accept button, you will be directed to a common messages room.",
+    description: "You receive notifications from Mira introducing you to people whom you can help. You can judge them by seeing their profile, and there is an accept button. When you click accept, the other person gets a notification that you are willing to help. They will also see your profile and judge you, and if they also accept, you will be directed to a common messages room.",
     gradient: "linear(to-br, teal.500, emerald.500, lime.500)",
   },
   {
-    title: "Messages",
-    description: "After getting connected, you will be in a temporary message room where at the end of the chat you will get a reputation score from the other user. The more people you help, the greater you can earn, and you can find tools to trade time.",
+    title: "Messages & Reputation",
+    description: "After getting connected, you will be in a temporary message room where at the end of the chat you get a reputation score from the other user. The more people you help, the greater your reputation grows, unlocking new opportunities and connections within the network.",
     gradient: "linear(to-br, pink.500, rose.500, red.500)",
   },
 ];
@@ -170,7 +291,7 @@ const FeaturesSection = () => {
               maxW="6xl"
               mx="auto"
             >
-              In OpenWorld, We Connect You to the Right People at the Right Time
+              In OpenWorldX, We Connect You to the Right People at the Right Time
             </Heading>
           </motion.div>
           <motion.div 
@@ -185,7 +306,7 @@ const FeaturesSection = () => {
               mx="auto"
               lineHeight="1.6"
             >
-              We are solving this by introducing AI friends that chat with you and understand you. We are building a new ecosystem where you get paid when you help others, and your reputation grows as you contribute.
+              We are solving this by introducing AI friends that chat with you and understand you. We are building a new ecosystem where your reputation grows as you help others.
             </Text>
           </motion.div>
         </VStack>
@@ -195,7 +316,7 @@ const FeaturesSection = () => {
           transition={{ delay: 0.2, duration: 0.5 }}
         >
           <SimpleGrid 
-            columns={{ base: 1, md: 3 }} 
+            columns={{ base: 1, md: 2, lg: 4 }} 
             spacing={8} 
             maxW="7xl" 
             mx="auto"
@@ -220,7 +341,12 @@ const FeaturesSection = () => {
                   borderColor="whiteAlpha.300"
                 >
                   <CardHeader pb={4}>
-                    <Heading as="h3" size="xl" fontWeight="semibold" mb={3}>
+                    <Heading 
+                      as="h3" 
+                      size={{ base: "xl", lg: "lg" }} 
+                      fontWeight="semibold" 
+                      mb={3}
+                    >
                       {title}
                     </Heading>
                   </CardHeader>
@@ -239,300 +365,34 @@ const FeaturesSection = () => {
   );
 };
 
-const pricingTiers = [
-  {
-    title: "Blue Level",
-    commission: "15%",
-    buttonText: "Start Trading",
-    description: "Entry level time trader. Build trust and start your journey.",
-    features: [
-      "Access to marketplace",
-      "Basic reputation score",
-      "Trade verification",
-      "Secure escrow transactions",
-    ],
-    color: "blue"
-  },
-  {
-    title: "Green Level",
-    commission: "10%",
-    buttonText: "Trade Smarter",
-    description: "For consistent and reputed time traders.",
-    features: [
-      "Everything in Blue",
-      "Priority listing in marketplace",
-      "Faster trade approvals",
-      "Community recognition badge",
-    ],
-    color: "green"
-  },
-  {
-    title: "Purple Level",
-    commission: "5%",
-    buttonText: "Grow Reputation",
-    description: "Trusted traders with proven track record.",
-    features: [
-      "Everything in Green",
-      "Lower commission fees",
-      "Exclusive time-trading tools",
-      "Visibility boost in feed",
-    ],
-    color: "purple"
-  },
-  {
-    title: "Red Level",
-    commission: "2%",
-    buttonText: "Elite Trader",
-    description: "Top reputation holders. Premium community.",
-    features: [
-      "Everything in Purple",
-      "Elite trader badge",
-      "Advanced analytics tools",
-      "Early access to new features",
-    ],
-    color: "red"
-  },
-];
-
-const Pricing = () => {
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  const handlePrev = () => {
-    setActiveIndex((prev) => (prev === 0 ? pricingTiers.length - 1 : prev - 1));
-  };
-
-  const handleNext = () => {
-    setActiveIndex((prev) => (prev === pricingTiers.length - 1 ? 0 : prev + 1));
-  };
-
-  const tier = pricingTiers[activeIndex];
-
-  return (
-    <Box 
-      as="section" 
-      position="relative" 
-      minH="100vh"
-      display="flex"
-      alignItems="center"
-      bgGradient="radial(ellipse 200% 100% at bottom left, #0A1F91, #1E3FB4, #4B6FFF)" 
-      py={20}
-      overflow="hidden"
-    >
-      <Container maxW="6xl">
-        <VStack textAlign="center" spacing={6} mb={12}>
-          <Heading 
-            as="h2" 
-            size={{ base: '2xl', md: '3xl', lg: '4xl' }} 
-            fontWeight="bold" 
-            color="white"
-          >
-            Time Trader Levels
-          </Heading>
-          <Text 
-            fontSize={{ base: 'lg', md: 'xl' }} 
-            color="blue.100" 
-            opacity={0.9} 
-            maxW="3xl" 
-            mx="auto"
-          >
-            Reputation-based levels. Grow as you trade. We just charge a small commission.
-          </Text>
-        </VStack>
-        
-        {/* Desktop Grid */}
-        <SimpleGrid 
-          columns={{ base: 1, lg: 2, xl: 4 }} 
-          spacing={8} 
-          display={{ base: 'none', lg: 'grid' }}
-        >
-          {pricingTiers.map((tier, index) => (
-            <Card 
-              key={tier.title}
-              bg="whiteAlpha.100"
-              backdropFilter="blur(10px)"
-              color="white"
-              rounded="2xl"
-              p={8}
-              shadow="2xl"
-              border="1px solid"
-              borderColor="whiteAlpha.200"
-              textAlign="center"
-              position="relative"
-              overflow="hidden"
-              _hover={{
-                transform: 'translateY(-8px)',
-                transition: 'all 0.3s ease'
-              }}
-            >
-              <Box
-                position="absolute"
-                top={0}
-                left={0}
-                right={0}
-                h="4px"
-                bgGradient={`linear(to-r, ${tier.color}.400, ${tier.color}.600)`}
-              />
-              <Heading as="h3" size="xl" fontWeight="semibold" mb={3}>
-                {tier.title}
-              </Heading>
-              <Text fontSize="sm" color="blue.100" opacity={0.9} mb={6}>
-                {tier.description}
-              </Text>
-              <Flex fontSize="4xl" fontWeight="bold" mb={6} align="baseline" justify="center">
-                {tier.commission}
-                <Text ml={2} fontSize="lg" fontWeight="medium" color="blue.200">
-                  commission
-                </Text>
-              </Flex>
-              <Button 
-                as={RouterLink} 
-                to="/auth" 
-                w="full" 
-                py={4}
-                fontSize="lg"
-                bgGradient={`linear(to-r, ${tier.color}.500, ${tier.color}.700)`}
-                color="white"
-                fontWeight="semibold"
-                borderRadius="lg"
-                _hover={{ 
-                  bgGradient: `linear(to-r, ${tier.color}.600, ${tier.color}.800)`,
-                  transform: 'scale(1.02)'
-                }}
-                mb={6}
-              >
-                {tier.buttonText}
-              </Button>
-              <List spacing={3} fontSize="sm" color="blue.100">
-                {tier.features.map((feature, i) => (
-                  <ListItem key={i} display="flex" alignItems="center" gap={3}>
-                    <ListIcon as={CheckIcon} color={`${tier.color}.300`} />
-                    {feature}
-                  </ListItem>
-                ))}
-              </List>
-            </Card>
-          ))}
-        </SimpleGrid>
-
-        {/* Mobile Carousel */}
-        <Flex 
-          justify="center" 
-          align="center" 
-          gap={{ base: 4, md: 8 }} 
-          display={{ base: 'flex', lg: 'none' }}
-        >
-          <Button 
-            onClick={handlePrev} 
-            bg="whiteAlpha.200"
-            _hover={{ bg: 'whiteAlpha.300' }}
-            color="white" 
-            p={3}
-            borderRadius="full" 
-            backdropFilter="blur(4px)"
-            size="lg"
-          >
-            <ChevronLeft size={24} />
-          </Button>
-          
-          <Card 
-            bg="whiteAlpha.100"
-            backdropFilter="blur(10px)"
-            color="white"
-            rounded="2xl"
-            p={8}
-            shadow="2xl"
-            w="full"
-            maxW="md"
-            border="1px solid"
-            borderColor="whiteAlpha.200"
-            textAlign="center"
-          >
-            <Heading as="h3" size="xl" fontWeight="semibold" mb={3}>
-              {tier.title}
-            </Heading>
-            <Text fontSize="sm" color="blue.100" opacity={0.9} mb={3}>
-              {tier.description}
-            </Text>
-            <Flex fontSize="3xl" fontWeight="bold" mb={4} align="baseline" justify="center">
-              {tier.commission}
-              <Text ml={2} fontSize="md" fontWeight="medium" color="blue.200">
-                commission
-              </Text>
-            </Flex>
-            <Button 
-              as={RouterLink} 
-              to="/auth" 
-              w="full" 
-              py={4}
-              fontSize="lg"
-              bgGradient={`linear(to-r, ${tier.color}.500, ${tier.color}.700)`}
-              color="white"
-              fontWeight="semibold"
-              borderRadius="lg"
-              _hover={{ 
-                bgGradient: `linear(to-r, ${tier.color}.600, ${tier.color}.800)`,
-                transform: 'scale(1.02)'
-              }}
-              mb={6}
-            >
-              {tier.buttonText}
-            </Button>
-            <List spacing={2} fontSize="sm" color="blue.100">
-              {tier.features.map((feature, i) => (
-                <ListItem key={i} display="flex" alignItems="center" gap={3}>
-                  <ListIcon as={CheckIcon} color={`${tier.color}.300`} />
-                  {feature}
-                </ListItem>
-              ))}
-            </List>
-          </Card>
-          
-          <Button 
-            onClick={handleNext} 
-            bg="whiteAlpha.200"
-            _hover={{ bg: 'whiteAlpha.300' }}
-            color="white" 
-            p={3}
-            borderRadius="full" 
-            backdropFilter="blur(4px)"
-            size="lg"
-          >
-            <ChevronRight size={24} />
-          </Button>
-        </Flex>
-      </Container>
-    </Box>
-  );
-};
-
 const faqs = [
   {
-    question: "What is OpenWorld TradeTime?",
-    answer: "It's India's first social network for Trading Time where you can Connect with people beyond your network through of AI friends",
+    question: "What is OpenWorldX?",
+    answer: "OpenWorldX is India's first AI-powered social network where you can connect with people beyond your network through your AI friend Mira.",
   },
   {
-    question: "How does OpenWorld make money?",
-    answer: "OpenWorld doesn't charge you a monthly fee or subscription. Instead, it takes a small cut (called a commission) only when you successfully complete a trade. This keeps things fair and lets everyone use the platform without upfront costs.",
+    question: "What is Mira?",
+    answer: "Mira is your personal AI friend who chats with you, understands you, and helps you connect with relevant people in the network. Mira can also blast your messages to find quick responses from people who can help.",
   },
   {
-    question: "What are Time Trader Levels?",
-    answer: "These are like levels in a game that show how trustworthy and active you are on the platform. You start at Blue (beginner) and can level up to Green, Purple, and Red by helping others and building a good reputation. Higher levels give you perks like lower fees, better visibility, and special tools to make trading easier.",
+    question: "What are Blasts?",
+    answer: "Blasts are a powerful feature where Mira shares your message with relevant people in the network and brings back instant responses. It's the fastest way to get help or find collaborators for your ideas.",
   },
   {
-    question: "Is OpenWorld free to use?",
-    answer: "Yes, joining and using OpenWorld is completely free. You can sign up, browse, connect with people using AI friends, and start trading time without paying anything upfront. The only cost is a small commission if your trade goes through successfully.",
+    question: "What are Reputation Levels?",
+    answer: "These are levels (Bronze, Silver, Gold, Platinum) that show how trustworthy and active you are on the platform. You start at Bronze and can level up by helping others and building a good reputation. Higher levels give you perks like better visibility and more connections.",
   },
   {
-    question: "Who can join OpenWorld?",
-    answer: "Anyone can join! Whether you're a student looking to learn new skills, a freelancer offering your expertise, a startup needing help, or even a company or agency— if you have time or skills to share, you're welcome. It's for everyday people who want to help and get help in return.",
+    question: "Is OpenWorldX free to use?",
+    answer: "Yes, joining and using OpenWorldX is completely free. You can sign up, connect with people using Mira, and build your reputation without any upfront costs.",
   },
   {
-    question: "Is OpenWorld decentralized?",
-    answer: "Yes, it's built to be decentralized. This means it's not run by one central authority. Instead, it relies on users, their reputations, and AI to connect people fairly. Your success depends on how much you contribute and the trust you build, not on ads or money.",
+    question: "Who can join OpenWorldX?",
+    answer: "Anyone can join! Whether you are a student looking to learn new skills, a professional seeking collaborations, or someone who wants to expand their network — OpenWorldX is for everyone who wants to connect beyond their immediate circle.",
   },
   {
-    question: "How can I earn by helping others for free?",
-    answer: "You can earn real money just by helping people on the platform! If you help more than 50 people (for free or through trades), OpenWorld will pay you a decent amount as a reward. And if you keep the streak going by continuing to help consistently, your earnings will compound—meaning they grow over time, so you earn even more the longer you maintain it.",
+    question: "How does the reputation system work?",
+    answer: "After each conversation, you exchange reputation scores with the other user. The more people you help and the better your interactions, the higher your reputation grows. Higher reputation unlocks new levels and opportunities.",
   },
 ];
 
@@ -558,7 +418,7 @@ const FAQ = () => {
             Frequently Asked Questions
           </Heading>
           <Text color="gray.600" fontSize={{ base: 'lg', md: 'xl' }} maxW="2xl" mx="auto">
-            Everything you need to know about trading time in OpenWorld.
+            Everything you need to know about OpenWorldX and Mira.
           </Text>
         </VStack>
         <Accordion allowToggle>
@@ -601,58 +461,58 @@ const FAQ = () => {
 
 const testimonials = [
   {
-    text: "OpenWorld made it simple for me to exchange my design skills for coding help. No money, just time well spent!",
+    text: "OpenWorldX made it simple for me to find people who share my interests. Mira is amazing!",
     imageSrc: "/avatar-1.jpeg",
-    name: "Jamie Rivera",
-    username: "@jamietrades",
+    name: "Ishita",
+    username: "@Ishita",
   },
   {
-    text: "The reputation system in OpenWorld motivates me to trade smarter and grow my Red-level status.",
+    text: "The reputation system motivates me to help more people. Can't wait to reach Platinum level!",
     imageSrc: "/avatar-2.jpeg",
-    name: "Josh Smith",
-    username: "@jjsmith",
+    name: "Aditya",
+    username: "@Aditya",
   },
   {
-    text: "I've met incredible people and exchanged time in ways that felt more valuable than money.",
+    text: "I've met incredible people through Mira. The Blasts feature helped me get instant responses!",
     imageSrc: "/avatar-3.jpeg",
-    name: "Morgan Lee",
-    username: "@morganlee",
+    name: "Kiran",
+    username: "@Kiran",
   },
   {
-    text: "Trading time in a decentralized way felt fresh and fair -- OpenWorld is changing how I think about work.",
+    text: "Finally a social network that helps me connect beyond my circle. OpenWorldX is revolutionary.",
     imageSrc: "/avatar-4.jpeg",
-    name: "Casey Jordan",
-    username: "@caseyj",
+    name: "Kavya",
+    username: "@Kavya",
   },
   {
-    text: "OpenWorld is more than a marketplace, it's a community of people exchanging skills with trust.",
+    text: "Mira understands me better than any algorithm. The connections I've made are truly meaningful.",
     imageSrc: "/avatar-5.jpeg",
-    name: "Taylor Kim",
-    username: "@taylorkimm",
+    name: "Rohan",
+    username: "@Rohan",
   },
   {
-    text: "Instead of chasing clients, I just trade my hours here and get what I need back. It feels natural.",
+    text: "Instead of scrolling endlessly, I now connect with people who actually need my help.",
     imageSrc: "/avatar-6.jpeg",
-    name: "Riley Smith",
-    username: "@rileysmith",
+    name: "Aarav",
+    username: "@Aarav",
   },
   {
-    text: "The levels -- Blue, Green, Purple, Red -- make it exciting to grow your reputation while trading.",
+    text: "The reputation levels make it exciting to grow your impact in the community.",
     imageSrc: "/avatar-7.jpeg",
-    name: "Jordan Patel",
-    username: "@jpatel",
+    name: "Vihaan",
+    username: "@Vihaan",
   },
   {
-    text: "I exchanged tutoring hours for music lessons. OpenWorld made the swap seamless and transparent.",
+    text: "Blasts helped me find collaborators for my project within minutes. This is the future!",
     imageSrc: "/avatar-8.jpeg",
-    name: "Sam Dawson",
-    username: "@dawson",
+    name: "Diya",
+    username: "@Diya",
   },
   {
-    text: "Finally, a place where time is truly currency. OpenWorld feels like the future of collaboration.",
+    text: "Finally, a place where AI actually helps you build meaningful connections.",
     imageSrc: "/avatar-9.jpeg",
-    name: "Casey Harper",
-    username: "@caseyharper",
+    name: "Siddharth",
+    username: "@Siddharth",
   },
 ];
 
@@ -675,11 +535,11 @@ const TestimonialsColumn = (props) => (
       gap={6}
       pb={6}
     >
-      {[...new Array(2)].fill(0).map((_, index) => (
-        <Fragment key={index}>
+      {[...new Array(2)].fill(0).map((_, arrayIndex) => (
+        <Fragment key={arrayIndex}>
           {props.testimonials.map(({ text, imageSrc, name, username }, i) => (
             <Card
-              key={`${index}-${i}`}
+              key={`${arrayIndex}-${i}`}
               p={8}
               borderWidth={1}
               borderColor="gray.100"
@@ -696,7 +556,7 @@ const TestimonialsColumn = (props) => (
               }}
             >
               <Text color="gray.800" fontSize="lg" lineHeight="1.6">
-                "{text}"
+                &quot;{text}&quot;
               </Text>
               <Flex align="center" gap={4} mt={6}>
                 <Image
@@ -764,8 +624,8 @@ const Testimonials = () => {
             maxW="2xl"
             mx="auto"
           >
-            OpenWorld is not just about trading time — it's about building trust,
-            reputation, and a community where collaboration feels natural.
+            OpenWorldX is not just about connecting — it's about building trust,
+            reputation, and meaningful relationships with the help of AI.
           </Text>
         </VStack>
         
@@ -813,10 +673,6 @@ const CallToAction = () => {
   });
   const translateY = useTransform(scrollYProgress, [0, 1], [100, -100]);
 
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
   return (
     <Box 
       as="section" 
@@ -849,7 +705,7 @@ const CallToAction = () => {
             bgClip="text"
             maxW="3xl"
           >
-            Start Trading Your Time on OpenWorld
+            Join OpenWorldX Today
           </Heading>
           <Text 
             color="gray.700" 
@@ -858,7 +714,7 @@ const CallToAction = () => {
             mx="auto"
             lineHeight="1.6"
           >
-            Join a decentralized marketplace where your skills, time, and reputation define your growth. Trade freely, build trust, and climb levels from Blue to Red in OpenWorld.
+            Be part of India&apos;s first AI-powered social network. Let Mira help you connect with the right people, grow your reputation, and expand your network beyond boundaries.
           </Text>
           <Flex 
             gap={6} 
@@ -890,7 +746,10 @@ const CallToAction = () => {
               Get Started
             </Button>
             <Button 
-              onClick={scrollToTop} 
+              as="a"
+              href="https://play.google.com/store/apps/details?id=com.openworldx.openworld"
+              target="_blank"
+              rel="noopener noreferrer"
               px={8} 
               py={4}
               size="lg"
@@ -908,7 +767,7 @@ const CallToAction = () => {
               transition="all 0.3s"
               flex={1}
             >
-              Learn More →
+              Download App
             </Button>
           </Flex>
         </VStack>
@@ -919,7 +778,7 @@ const CallToAction = () => {
 
 const Footer = () => {
   return (
-    <Box as="footer" bg="black.900" color="gray.300" py={16}>
+    <Box as="footer" bg="black" color="gray.300" py={16}>
       <Container maxW="6xl">
         <VStack spacing={8} textAlign="center">
           <Heading 
@@ -929,16 +788,16 @@ const Footer = () => {
               bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
               bgClip="text"
             >
-              OpenWorld TradeTime
+              OpenWorldX
             </Heading>
             <Text 
               fontSize={{ base: 'md', lg: 'lg' }} 
-              color="white.600" 
+              color="gray.400" 
               maxW="2xl" 
               mx="auto"
               lineHeight="1.7"
             >
-              India’s first social network for <strong>trading time</strong> — connect beyond your circle, grow your reputation, and discover new opportunities with the help of <strong>AI-powered friends</strong>.
+              India&apos;s first AI-powered social network — connect beyond your circle, grow your reputation, and discover new opportunities with the help of <strong>Mira</strong>, your AI friend.
             </Text>
           <Flex 
             flexWrap="wrap" 
@@ -954,20 +813,19 @@ const Footer = () => {
               How It Works
             </Link>
             <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Communities
+              Mira AI
             </Link>
             <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Time Levels
+              Reputation Levels
             </Link>
             <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Marketplace
+              Blasts
             </Link>
             <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
               Careers
             </Link>
           </Flex>
           <Flex justify="center" gap={6}>
-            
             <Link 
               href="https://www.linkedin.com/company/harinath-mechtech-innovations-private-limited/" 
               target="_blank" 
@@ -996,8 +854,8 @@ const Footer = () => {
               <Image src="/social-insta.svg" alt="Instagram" w={6} h={6} filter="invert(1)"  _hover={{ opacity: 0.8 }} />
             </Link>
           </Flex>
-          <Text fontSize="sm" color="gray.500" pt={4} borderTop="1px solid" borderColor="gray.700" w="full" maxW="md" mx="auto">
-            &copy; {new Date().getFullYear()} OpenWorld (Harinath Mechtech Innovations Pvt. Ltd.). All rights reserved.
+          <Text fontSize="sm" color="gray.500" pt={4} borderTop="1px solid" borderColor="gray.700" w="full" maxW="3xl" mx="auto">
+            &copy; {new Date().getFullYear()} {COMPANY_LEGAL_NAME}. All rights reserved.
           </Text>
         </VStack>
       </Container>
@@ -1008,9 +866,9 @@ const Footer = () => {
 const LandingPage = () => {
   return (
     <Box w="100%" minH="100vh">
+      <Header />
       <Hero />
       <FeaturesSection />
-      <Pricing />
       <FAQ />
       <Testimonials />
       <CallToAction />

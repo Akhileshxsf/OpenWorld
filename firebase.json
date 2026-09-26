@@ -1,4 +1,16 @@
 {
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "whatsapp",
+      "ignore": [
+        "node_modules",
+        ".git",
+        ".env.*",
+        "*.local"
+      ]
+    }
+  ],
   "hosting": {
     "public": "dist",
     "ignore": [
@@ -7,6 +19,14 @@
       "**/node_modules/**"
     ],
     "rewrites": [
+      {
+        "source": "/api/whatsapp",
+        "function": "whatsappWebhook"
+      },
+      {
+        "source": "/api/whatsapp/meta",
+        "function": "metaWhatsappWebhook"
+      },
       {
         "source": "**",
         "destination": "/index.html"
