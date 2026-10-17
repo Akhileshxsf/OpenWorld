@@ -7,7 +7,7 @@ function graphUrl(path) {
 }
 
 export function extractMetaInboundMessages(body) {
-  if (!body || body.object !== "whatsapp_business_account") return [];
+  if (!body || body.object !== "whatsapp_business_account") return { inbound: [], statuses: [] };
 
   const inbound = [];
   const statuses = [];
@@ -117,4 +117,123 @@ export async function sendMetaWhatsAppText(destination, text, phoneNumberId = pr
   }
 
   return data;
+}
+
+export async function sendMetaWhatsAppInteractiveCta({
+  destination,
+  phoneNumberId = process.env.META_PHONE_NUMBER_ID,
+  bodyText,
+  buttonLabel,
+  buttonUrl,
+  headerText,
+}) {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) throw new Error("META_ACCESS_TOKEN is missing");
+  if (!phoneNumberId) throw new Error("META_PHONE_NUMBER_ID is missing");
+
+  const interactive = {
+    type: "cta_url",
+    body: { text: bodyText.slice(0, 1024) },
+    action: {
+      name: "cta_url",
+      parameters: {
+        display_text: buttonLabel.slice(0, 20),
+        url: buttonUrl,
+      },
+    },
+  };
+
+  if (headerText) {
+    interactive.header = { type: "text", text: headerText.slice(0, 60) };
+  }
+
+  const response = await fetch(graphUrl(`${phoneNumberId}/messages`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: String(destination).replace(/\D/g, ""),
+      type: "interactive",
+      interactive,
+    }),
+  });
+
+  const raw = await response.text();
+  let data = raw;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    // keep raw
+  }
+
+  if (!response.ok) {
+    throw new Error(`Meta interactive send failed: ${response.status} ${raw}`);
+  }
+
+  return data;
+}
+
+/**
+ * Sends an approved WhatsApp template. URL button suffix is appended to the URL defined in the template.
+ * Create template in Meta Business Manager with a dynamic URL button, e.g.
+ * https://openworldx.com/upload-resume?{{1}}
+ */
+export async function sendMetaWhatsAppTemplate(
+  destination,
+  templateName,
+  phoneNumberId = process.env.META_PHONE_NUMBER_ID,
+  { languageCode = "en", bodyParams = [], buttonUrlSuffix = "" } = {}
+) {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) throw new Error("META_ACCESS_TOKEN is missing");
+  if (!phoneNumberId) throw new Error("META_PHONE_NUMBER_ID is missing");
+
+  const components = [];
+  if (bodyParams.length) {
+    components.push({
+      type: "body",
+      parameters: bodyParams.map((text) => ({ type: "text", text: String(text).slice(0, 256) })),
+    });
+  }
+  if (buttonUrlSuffix) {
+    components.push({
+      type: "button",
+      sub_type: "url",
+      index: "0",
+      parameters: [{ type: "text", text: String(buttonUrlSuffix).slice(0, 128) }],
+    });
+  }
+
+  const response = await fetch(graphUrl(`${phoneNumberId}/messages`), {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      to: String(destination).replace(/\D/g, ""),
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        ...(components.length ? { components } : {}),
+      },
+    }),
+  });
+
+  const raw = await response.text();
+  if (!response.ok) {
+    throw new Error(`Meta template send failed: ${response.status} ${raw}`);
+  }
+
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
 }

@@ -7,6 +7,8 @@ import MessageTab from "./components/Profile/MessageTab";
 import NotificationsPage from "./pages/NotificationsPage/NotificationsPage";
 import ChatbotPage from "./pages/ChatbotPage";
 import LandingPage from "./pages/LandingPage/LandingPage";
+import ResumeUploadPage from "./pages/ResumeUploadPage/ResumeUploadPage";
+import HirePage from "./pages/HirePage/HirePage";
 import DashboardPage from "./pages/HomePage/DashboardPage";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "./firebase/firebase";
@@ -40,6 +42,9 @@ function App() {
           path="/auth"
           element={!authUser ? <AuthPage /> : <Navigate to="/home" replace />}
         />
+
+        <Route path="/upload-resume" element={<ResumeUploadPage />} />
+        <Route path="/hire" element={<HirePage />} />
         
         {/* Profile page */}
         <Route path="/:username" element={<ProfilePage />} />

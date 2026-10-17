@@ -34,13 +34,11 @@ export async function handleGupshupWebhook(rawBody) {
     });
 
     const readReceipt = sendReadReceipt(inbound.id);
+    const history = await loadChat(inbound.phone);
+
     const reply = inbound.unsupported
-      ? "I can read text on WhatsApp for now. Send me a short message and I'll help you connect with people on OpenWorld."
-      : await generateMiraReply(
-          inbound.text,
-          await loadChat(inbound.phone),
-          inbound.name
-        );
+      ? "I can read text on WhatsApp for now. Send me a short message — I'm Mira, and I help you find jobs."
+      : await generateMiraReply(inbound.text, history, inbound.name);
     await readReceipt;
 
     const sendResult = await sendWhatsAppText(inbound.phone, reply);

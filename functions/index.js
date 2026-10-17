@@ -77,7 +77,7 @@ export const metaWhatsappWebhook = onRequest(
   {
     cors: true,
     invoker: "public",
-    timeoutSeconds: 60,
+    timeoutSeconds: 120,
     memory: "512MiB",
   },
   async (req, res) => {
@@ -115,6 +115,66 @@ export const metaWhatsappWebhook = onRequest(
     } catch (error) {
       console.error("Meta WhatsApp webhook failed", error);
       res.status(200).send();
+    }
+  }
+);
+
+export const hireApi = onRequest(
+  {
+    cors: true,
+    invoker: "public",
+    timeoutSeconds: 120,
+    memory: "512MiB",
+  },
+  async (req, res) => {
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      const body = parseRequestBody(req);
+      const { handleHireMatch, handleHireIntroRequest } = await import("./hireMatch.js");
+      const result = req.path.endsWith("/intro")
+        ? await handleHireIntroRequest(body)
+        : await handleHireMatch(body);
+      res.status(200).json(result);
+    } catch (error) {
+      console.error("hireApi failed", req.path, error);
+      res.status(400).json({ error: error.message || "Something went wrong" });
+    }
+  }
+);
+
+export const whatsappResumeUpload = onRequest(
+  {
+    cors: true,
+    invoker: "public",
+    timeoutSeconds: 120,
+    memory: "512MiB",
+  },
+  async (req, res) => {
+    if (req.method === "OPTIONS") {
+      res.status(204).send("");
+      return;
+    }
+    if (req.method !== "POST") {
+      res.status(405).json({ error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      const body = parseRequestBody(req);
+      const { handleWhatsAppResumeUpload } = await import("./uploadResume.js");
+      const result = await handleWhatsAppResumeUpload(body);
+      res.status(200).json(result);
+    } catch (error) {
+      console.error("whatsappResumeUpload failed", error);
+      res.status(400).json({ error: error.message || "Upload failed" });
     }
   }
 );

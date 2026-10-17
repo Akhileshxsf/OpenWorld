@@ -14,7 +14,16 @@ const PageLayout = ({ children }) => {
     return <PageLayoutSpinner />;
   }
 
-  const canRenderSidebar = pathname !== "/auth" && user;
+  const standalone = pathname === "/upload-resume" || pathname === "/hire" || pathname === "/auth";
+  const canRenderSidebar = !standalone && pathname !== "/auth" && user;
+
+  if (standalone) {
+    return (
+      <Box minH="100dvh" w="100%" maxW="100vw" overflowX="hidden">
+        {children}
+      </Box>
+    );
+  }
 
   return (
     <Flex flexDir={{ base: "column", md: "row" }} minH="100vh">

@@ -18,6 +18,35 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "headers": [
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "regex": "^/[^.]*$",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|css)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      }
+    ],
     "rewrites": [
       {
         "source": "/api/whatsapp",
@@ -26,6 +55,14 @@
       {
         "source": "/api/whatsapp/meta",
         "function": "metaWhatsappWebhook"
+      },
+      {
+        "source": "/api/upload-resume",
+        "function": "whatsappResumeUpload"
+      },
+      {
+        "source": "/api/hire/**",
+        "function": "hireApi"
       },
       {
         "source": "**",

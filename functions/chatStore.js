@@ -1,23 +1,15 @@
-import { getApps, initializeApp } from "firebase-admin/app";
-import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
+import { getDb } from "./firebaseAdmin.js";
+
+const CHATS = "whatsappChats";
+const PROCESSED_MESSAGES = "whatsappProcessedMessages";
+const MAX_STORED_MESSAGES = 40;
 
 const memoryChats = new Map();
-let db = undefined;
 
-function getDb() {
-  if (db !== undefined) return db;
-
-  try {
-    if (!getApps().length) {
-      initializeApp();
-    }
-    db = getFirestore();
-  } catch (error) {
-    console.warn("Firestore unavailable, using in-memory WhatsApp chats:", error.message);
-    db = null;
-  }
-
-  return db;
+export async function isFirstWhatsAppContact(phone) {
+  const history = await loadChat(phone);
+  return history.length === 0;
 }
 
 export async function loadChat(phone) {
@@ -27,7 +19,7 @@ export async function loadChat(phone) {
   }
 
   try {
-    const snap = await firestore.collection("whatsappChats").doc(phone).get();
+    const snap = await firestore.collection(CHATS).doc(phone).get();
     if (!snap.exists) return memoryChats.get(phone) || [];
     return snap.data()?.messages || [];
   } catch (error) {
@@ -38,30 +30,50 @@ export async function loadChat(phone) {
 
 export async function saveChat(phone, name, userText, botText) {
   const now = new Date().toISOString();
-  const nextMessages = [
-    ...(memoryChats.get(phone) || []),
+  const newMessages = [
     { sender: "user", text: userText, timestamp: now },
     { sender: "bot", text: botText, timestamp: now },
-  ].slice(-20);
-  memoryChats.set(phone, nextMessages);
+  ];
+  memoryChats.set(phone, [...(memoryChats.get(phone) || []), ...newMessages].slice(-MAX_STORED_MESSAGES));
 
   const firestore = getDb();
   if (!firestore) return;
 
+  const ref = firestore.collection(CHATS).doc(phone);
   try {
-    await firestore.collection("whatsappChats").doc(phone).set(
-      {
-        phone,
-        name: name || "",
-        updatedAt: FieldValue.serverTimestamp(),
-        messages: FieldValue.arrayUnion(
-          { sender: "user", text: userText, timestamp: now },
-          { sender: "bot", text: botText, timestamp: now }
-        ),
-      },
-      { merge: true }
-    );
+    await firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const existing = snap.exists ? snap.data()?.messages || [] : [];
+      tx.set(
+        ref,
+        {
+          phone,
+          name: name || "",
+          updatedAt: FieldValue.serverTimestamp(),
+          messages: [...existing, ...newMessages].slice(-MAX_STORED_MESSAGES),
+        },
+        { merge: true }
+      );
+    });
   } catch (error) {
     console.error("Failed to save WhatsApp chat", error);
+  }
+}
+
+/** Returns false if this inbound message id was already handled (Meta retries slow webhooks). */
+export async function claimInboundMessage(messageId, phone) {
+  const firestore = getDb();
+  if (!firestore || !messageId) return true;
+
+  try {
+    await firestore.collection(PROCESSED_MESSAGES).doc(messageId).create({
+      phone,
+      receivedAt: FieldValue.serverTimestamp(),
+    });
+    return true;
+  } catch (error) {
+    if (error.code === 6) return false;
+    console.error("claimInboundMessage failed; processing anyway", error.message);
+    return true;
   }
 }

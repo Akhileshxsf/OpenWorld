@@ -1,880 +1,608 @@
-import { useRef, useState, Fragment } from "react";
-import { Link as RouterLink } from "react-router-dom";
-import { motion, useScroll, useTransform } from "framer-motion";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Box, Heading, Text, Flex, VStack, Button, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon, SimpleGrid, Card, CardBody, CardHeader, List, ListItem, ListIcon, Link, Image, Container } from '@chakra-ui/react';
-import { CheckIcon } from '@chakra-ui/icons';
+import { useRef } from "react";
+import { motion } from "framer-motion";
+import {
+  Box,
+  Heading,
+  Text,
+  Flex,
+  VStack,
+  HStack,
+  Accordion,
+  AccordionItem,
+  AccordionButton,
+  AccordionPanel,
+  AccordionIcon,
+  SimpleGrid,
+  Link,
+  Image,
+  Divider,
+} from "@chakra-ui/react";
+import {
+  Briefcase,
+  Building2,
+  MessageCircle,
+  ShieldCheck,
+  Sparkles,
+  Target,
+} from "lucide-react";
+import StudentExperienceShowcase from "./StudentExperienceShowcase";
+import LandingHeader from "./LandingHeader";
+import AudienceSection from "./AudienceSection";
+import {
+  fadeUp,
+  staggerContainer,
+  statIcons,
+  WhatsAppButton,
+  PrimaryButton,
+  GhostLink,
+  SocialIconLink,
+  Section,
+  SectionHeader,
+  LandingContainer,
+  IncubatorTrustLine,
+  HeroEyebrow,
+  landingLayout,
+  colors,
+  ScrollStagger,
+  ScrollReveal,
+  scrollViewport,
+} from "./landingUi";
+
+const WHATSAPP_HREF = import.meta.env.VITE_WHATSAPP_NUMBER
+  ? `https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira")}`
+  : null;
+
+const COMPANY_CONTACT_MAIL = "mailto:noreply@openworldx.com?subject=OpenWorldX%20%E2%80%94%20Hiring%20%2F%20Campus%20partnership";
 
 const COMPANY_LEGAL_NAME = "HARINATH MECHTECH INNOVATIONS PRIVATE LIMITED";
 
-const Header = () => {
-  return (
-    <Box
-      as="header"
-      position="sticky"
-      top={0}
-      zIndex={20}
-      bg="white"
-      borderBottom="1px solid"
-      borderColor="gray.200"
-      shadow="sm"
-    >
-      <Container maxW="container.xl" px={{ base: 4, md: 16 }} py={{ base: 3, md: 3.5 }}>
-        <Flex
-          align="center"
-          justify="space-between"
-          gap={4}
-          direction={{ base: "column", md: "row" }}
-        >
-          <Flex align="center" gap={3}>
-            <Image src="/logohero.jpeg" alt="OpenWorldX" w={9} h={9} objectFit="contain" />
-            <Text fontWeight="bold" color="gray.900" fontSize={{ base: "md", md: "lg" }}>
-              OpenWorldX
-            </Text>
-          </Flex>
-          <Text
-            as="p"
-            fontSize={{ base: "10px", sm: "xs", md: "sm" }}
-            fontWeight="bold"
-            letterSpacing="0.02em"
-            color="gray.800"
-            textAlign={{ base: "center", md: "right" }}
-            textTransform="none"
-            lineHeight="1.4"
-          >
-            {COMPANY_LEGAL_NAME}
-          </Text>
-        </Flex>
-      </Container>
-    </Box>
-  );
-};
+const MIRA_VIDEO_FILE = "Mira Video updated.mp4";
+const MIRA_VIDEO_SRC = `/${encodeURIComponent(MIRA_VIDEO_FILE).replace(/%2F/g, "/")}`;
+
+const IIT_COUNT = 23;
+const NIT_COUNT = 31;
+const TNP_CELL_COUNT = IIT_COUNT + NIT_COUNT;
+
+const stats = [
+  { value: String(TNP_CELL_COUNT), label: "T&P cells partnered", shortLabel: "T&P partners" },
+  { value: String(IIT_COUNT), label: "IIT campuses", shortLabel: "IITs" },
+  { value: String(NIT_COUNT), label: "NIT campuses", shortLabel: "NITs" },
+  { value: "WhatsApp", label: "Mira for students", shortLabel: "Mira" },
+];
 
 const Hero = () => {
-  const heroRef = useRef(null);
   const videoRef = useRef(null);
 
-  // Attempt to play video with sound
   const handleVideoLoad = () => {
     if (videoRef.current) {
-      videoRef.current.play().catch(e => console.log("Auto-play with sound prevented by browser:", e));
+      videoRef.current.play().catch(() => {});
     }
   };
 
   return (
-    <Box 
-      as="section" 
-      ref={heroRef} 
-      minH="100vh" 
-      display="flex" 
+    <Box
+      as="section"
+      bg={colors.surface}
+      borderBottom="1px solid"
+      borderColor={colors.border}
+      minH={{ base: "auto", lg: "calc(100svh - 4rem)" }}
+      display="flex"
       alignItems="center"
-      bgGradient="linear(to-br, blue.50, white, blue.100)" 
-      overflowX="clip"
     >
-      <Container maxW="container.xl" px={{ base: 6, md: 16 }}>
-        <Flex 
-          align="center" 
-          justify="space-between" 
-          gap={12} 
-          direction={{ base: 'column', lg: 'row' }}
-          py={12}
-        >
-          <VStack 
-            maxW="2xl" 
-            align={{ base: 'center', lg: 'flex-start' }} 
-            textAlign={{ base: 'center', lg: 'left' }} 
-            spacing={5}
+      <LandingContainer py={{ base: 12, md: 16, lg: 18 }} w="full">
+        <Flex align="center" justify="space-between" gap={{ base: 12, lg: 16 }} direction={{ base: "column", lg: "row" }}>
+          <Box
+            as={motion.div}
             flex={1}
+            w="full"
+            maxW={{ lg: "34rem" }}
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
           >
-            <Flex align="center" gap={4} direction={{ base: 'row', md: 'row' }}>
-              <Image 
-                src="/logohero.jpeg" 
-                alt="Logo" 
-                w={{ base: 20, md: 28 }} 
-                h={{ base: 20, md: 28 }} 
-                objectFit="contain"
-                bg="transparent"
-              />
-              <Box>
-                <Heading 
-                  as="h1" 
-                  fontSize={{ base: '3xl', md: '5xl' }} 
-                  fontWeight="extrabold" 
-                  lineHeight="1.2" 
-                  bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
-                  bgClip="text"
+            <VStack align={{ base: "center", lg: "flex-start" }} textAlign={{ base: "center", lg: "left" }} spacing={{ base: 6, md: 8 }}>
+              <motion.div variants={fadeUp}>
+                <HeroEyebrow>IIT &amp; NIT talent platform</HeroEyebrow>
+              </motion.div>
+
+              <motion.div variants={fadeUp}>
+                <Heading
+                  as="h1"
+                  fontSize={{ base: "3xl", md: "4xl", lg: "5xl" }}
+                  fontWeight="semibold"
+                  letterSpacing="-0.03em"
+                  lineHeight="1.1"
+                  color={colors.text}
                 >
-                  OpenWorldX
+                  India&apos;s largest curated pool of{" "}
+                  <Text as="span" color={colors.brand}>
+                    IIT &amp; NIT talent
+                  </Text>
                 </Heading>
-                <Text 
-                  fontSize={{ base: 'xl', md: '2xl' }} 
-                  fontWeight="semibold" 
-                  color="gray.600"
-                  mt={1}
-                >
-                  The AI Network
+              </motion.div>
+
+              <motion.div variants={fadeUp}>
+                <Text fontSize={{ base: "lg", md: "xl" }} color={colors.textSecondary} lineHeight="1.75" maxW="34rem">
+                  Students build rich profiles by chatting with <strong>Mira</strong> on WhatsApp. We verify skills and
+                  experience, partner with <strong>{TNP_CELL_COUNT}</strong> campus T&amp;P ecosystems, and connect the
+                  right people to internships and jobs.
                 </Text>
-              </Box>
-            </Flex>
-            <Text fontSize={{ base: 'lg', md: 'xl' }} color="gray.700" fontWeight="medium" lineHeight="1.6" mt={4}>
-              We are always surrounded by the same 4 people everyday. Current social media also connects us with the same set of people we already know, and connecting with someone out of our network is really hard.
-            </Text>
-            <Text fontSize={{ base: 'md', md: 'lg' }} color="gray.600">
-              We are solving it in a new way that has never been done before.
-            </Text>
-            <Flex 
-              direction={{ base: 'column', sm: 'row' }} 
-              gap={4} 
-              mt={6} 
-              justify={{ base: 'center', lg: 'flex-start' }}
-              w="full"
-            >
-              <Button 
-                as={RouterLink} 
-                to="/auth" 
-                bgGradient="linear(to-r, blue.600, blue.500)" 
-                color="white" 
-                px={8} 
-                py={6}
-                size="lg"
-                fontSize="md"
-                borderRadius="full" 
-                fontWeight="bold" 
-                shadow="lg" 
-                _hover={{ shadow: 'xl', transform: 'translateY(-2px)', bgGradient: "linear(to-r, blue.700, blue.600)" }}
-                transition="all 0.3s"
-              >
-                Get Started
-              </Button>
-              {import.meta.env.VITE_WHATSAPP_NUMBER && (
-                <Button
-                  as="a"
-                  href={`https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira")}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  bg="#25D366"
-                  color="white"
-                  px={8}
-                  py={6}
-                  size="lg"
-                  fontSize="md"
-                  borderRadius="full"
-                  fontWeight="bold"
-                  shadow="lg"
-                  _hover={{ shadow: "xl", transform: "translateY(-2px)", bg: "#1EBE57" }}
-                  transition="all 0.3s"
-                >
-                  Chat on WhatsApp
-                </Button>
-              )}
-              <Button 
-                as="a"
-                href="https://play.google.com/store/apps/details?id=com.openworldx.openworld"
-                target="_blank"
-                rel="noopener noreferrer"
-                bg="white" 
-                color="gray.800" 
-                px={6} 
-                py={6}
-                size="lg"
-                fontSize="md"
-                borderRadius="full" 
-                fontWeight="bold" 
-                shadow="md"
-                border="1px solid"
-                borderColor="gray.300"
-                _hover={{ shadow: 'lg', transform: 'translateY(-2px)', bg: 'gray.50' }}
-                transition="all 0.3s"
-              >
-                <Image 
-                  src="/googlr play.jpeg" 
-                  alt="Google Play" 
-                  h={8} 
-                  objectFit="contain"
-                />
-              </Button>
-            </Flex>
-          </VStack>
-          <Flex 
-            mt={{ base: 10, lg: 0 }} 
-            flex={1} 
-            justify="center" 
-            align="center"
-            maxW={{ base: '100%', lg: '45%' }}
+              </motion.div>
+
+              <motion.div variants={fadeUp}>
+                <IncubatorTrustLine textAlign={{ base: "center", lg: "left" }} />
+              </motion.div>
+
+              <motion.div variants={fadeUp} style={{ width: "100%" }}>
+                <VStack spacing={4} pt={4} w="full" align={{ base: "center", lg: "flex-start" }}>
+                  <Flex direction={{ base: "column", sm: "row" }} gap={3} w={{ base: "full", sm: "auto" }}>
+                    {WHATSAPP_HREF && (
+                      <WhatsAppButton href={WHATSAPP_HREF} w={{ base: "full", sm: "auto" }}>
+                        Chat with Mira
+                      </WhatsAppButton>
+                    )}
+                    <PrimaryButton asRouter to="/hire" variant="outline" w={{ base: "full", sm: "auto" }}>
+                      Hire talent
+                    </PrimaryButton>
+                  </Flex>
+                  <GhostLink asRouter to="/auth">
+                    Sign in to OpenWorld
+                  </GhostLink>
+                </VStack>
+              </motion.div>
+            </VStack>
+          </Box>
+
+          <Box
+            as={motion.div}
+            flex={1}
+            w="full"
+            maxW={{ lg: "520px" }}
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.55, delay: 0.15, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Box
-              position="relative"
-              w="100%"
-              borderRadius="3xl"
-              overflow="hidden"
-              boxShadow="2xl"
-              border="1px solid"
-              borderColor="white"
-              bg="black"
-            >
+            <Box borderRadius="2xl" overflow="hidden" border="1px solid" borderColor={colors.border} shadow="xl" bg={colors.surfaceDark}>
               <Box
                 as="video"
                 ref={videoRef}
-                src="/Mira Video updated.mp4"
+                src={MIRA_VIDEO_SRC}
                 autoPlay
                 loop
+                muted
                 playsInline
                 controls
                 onLoadedData={handleVideoLoad}
                 w="100%"
-                h="auto"
                 objectFit="cover"
-                sx={{
-                  aspectRatio: "16/9",
-                }}
+                sx={{ aspectRatio: "16/9", display: "block" }}
               >
-                <source src="/Mira Video updated.mp4" type="video/mp4" />
-                Your browser does not support the video tag.
+                <source src={MIRA_VIDEO_SRC} type="video/mp4" />
               </Box>
             </Box>
-          </Flex>
+          </Box>
         </Flex>
-      </Container>
+      </LandingContainer>
     </Box>
   );
 };
 
-const modes = [
-  {
-    title: "AI Friend - Mira",
-    description: "Everyone has their own AI friend Mira who chats with them and understands them. Whenever you ask Mira to connect with someone, it chats with other AI friends in the network and finds who might help you, sending them a notification introducing you. First it sends to 5 people, then 10, and so on until one accepts.",
-    gradient: "linear(to-br, blue.500, indigo.500, purple.600)",
-  },
-  {
-    title: "Blasts",
-    description: "When you have a message or request that needs quick answers, Mira can blast it to relevant people in the network. Your AI analyzes your message and finds the most relevant people who can help, then shares it with them. You get instant responses from multiple people who are interested, making connections faster than ever before.",
-    gradient: "linear(to-br, blue.500, indigo.500, purple.600)",
-  },
-  {
-    title: "Notifications",
-    description: "You receive notifications from Mira introducing you to people whom you can help. You can judge them by seeing their profile, and there is an accept button. When you click accept, the other person gets a notification that you are willing to help. They will also see your profile and judge you, and if they also accept, you will be directed to a common messages room.",
-    gradient: "linear(to-br, teal.500, emerald.500, lime.500)",
-  },
-  {
-    title: "Messages & Reputation",
-    description: "After getting connected, you will be in a temporary message room where at the end of the chat you get a reputation score from the other user. The more people you help, the greater your reputation grows, unlocking new opportunities and connections within the network.",
-    gradient: "linear(to-br, pink.500, rose.500, red.500)",
-  },
-];
-
-const FeaturesSection = () => {
-  return (
-    <Box 
-      as="section" 
-      position="relative" 
-      zIndex={10} 
-      minH="100vh"
-      display="flex"
-      alignItems="center"
-      bgGradient="radial(ellipse 120% 100% at top right, #F0F5FF, #FFFFFF)" 
-      py={20}
-      overflow="hidden"
-    >
-      <Container maxW="7xl">
-        <VStack textAlign="center" mb={16} spacing={6}>
-          <motion.div 
-            initial={{ opacity: 0, y: 30 }} 
-            whileInView={{ opacity: 1, y: 0 }} 
-            transition={{ duration: 0.5 }}
-          >
-            <Heading 
-              as="h2" 
-              size={{ base: '2xl', md: '3xl', lg: '3xl' }} 
-              fontWeight="bold" 
-              bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
-              bgClip="text"
-              maxW="6xl"
-              mx="auto"
-            >
-              In OpenWorldX, We Connect You to the Right People at the Right Time
-            </Heading>
-          </motion.div>
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }} 
-            whileInView={{ opacity: 1, y: 0 }} 
-            transition={{ delay: 0.1, duration: 0.5 }}
-          >
-            <Text 
-              fontSize={{ base: 'lg', md: 'xl' }} 
-              color="gray.700" 
-              maxW="4xl" 
-              mx="auto"
-              lineHeight="1.6"
-            >
-              We are solving this by introducing AI friends that chat with you and understand you. We are building a new ecosystem where your reputation grows as you help others.
-            </Text>
-          </motion.div>
-        </VStack>
-        <motion.div 
-          initial={{ opacity: 0 }} 
-          whileInView={{ opacity: 1 }} 
-          transition={{ delay: 0.2, duration: 0.5 }}
-        >
-          <SimpleGrid 
-            columns={{ base: 1, md: 2, lg: 4 }} 
-            spacing={8} 
-            maxW="7xl" 
-            mx="auto"
-          >
-            {modes.map(({ title, description, gradient }) => (
-              <motion.div 
-                key={title} 
-                whileHover={{ scale: 1.05 }}
-                transition={{ type: "spring", stiffness: 300 }}
-              >
-                <Card 
-                  rounded="2xl" 
-                  p={{ base: 6, md: 8 }} 
-                  color="white" 
-                  bgGradient={gradient} 
-                  shadow="xl" 
-                  display="flex" 
-                  flexDir="column" 
-                  justifyContent="space-between"
-                  minH="320px"
+const StatsStrip = () => (
+  <Section bg={landingLayout.pageBg} compact>
+    <LandingContainer>
+      <ScrollStagger>
+        <SimpleGrid columns={{ base: 2, lg: 4 }} spacing={{ base: 4, md: 6 }}>
+          {stats.map(({ value, label, shortLabel }, i) => {
+            const StatIcon = statIcons[i] || Building2;
+            return (
+              <motion.div key={label} variants={fadeUp}>
+                <VStack
+                  spacing={2}
+                  py={{ base: 6, md: 8 }}
+                  px={4}
+                  borderRadius="xl"
+                  bg={colors.surface}
                   border="1px solid"
-                  borderColor="whiteAlpha.300"
+                  borderColor={colors.border}
+                  align="center"
+                  textAlign="center"
                 >
-                  <CardHeader pb={4}>
-                    <Heading 
-                      as="h3" 
-                      size={{ base: "xl", lg: "lg" }} 
-                      fontWeight="semibold" 
-                      mb={3}
-                    >
-                      {title}
-                    </Heading>
-                  </CardHeader>
-                  <CardBody pt={0}>
-                    <Text fontSize={{ base: 'sm', md: 'md' }} opacity={0.95} lineHeight="1.6">
-                      {description}
+                  <StatIcon size={20} strokeWidth={1.75} color={colors.textMuted} />
+                  <Text fontSize={{ base: "2xl", md: "3xl" }} fontWeight="semibold" color={colors.text} letterSpacing="-0.02em">
+                    {value}
+                  </Text>
+                  <Text fontSize="sm" color={colors.textMuted} lineHeight="1.4">
+                    <Box as="span" display={{ base: "inline", md: "none" }}>
+                      {shortLabel}
+                    </Box>
+                    <Box as="span" display={{ base: "none", md: "inline" }}>
+                      {label}
+                    </Box>
+                  </Text>
+                </VStack>
+              </motion.div>
+            );
+          })}
+        </SimpleGrid>
+      </ScrollStagger>
+    </LandingContainer>
+  </Section>
+);
+
+const PartnersSection = () => (
+  <Section id="partners" bg={colors.surface}>
+    <LandingContainer>
+      <ScrollReveal>
+        <Box borderRadius="2xl" bg={colors.surfaceDark} color={colors.textOnDark} px={{ base: 8, md: 12, lg: 14 }} py={{ base: 12, md: 16 }}>
+          <Flex direction={{ base: "column", lg: "row" }} gap={{ base: 10, lg: 16 }} align="flex-start">
+            <VStack align={{ base: "center", lg: "flex-start" }} textAlign={{ base: "center", lg: "left" }} spacing={5} flex={1}>
+              <Text fontSize="xs" fontWeight="semibold" letterSpacing="0.12em" textTransform="uppercase" color={colors.brandOnDark}>
+                Campus partnerships
+              </Text>
+              <Heading as="h2" fontSize={{ base: "2xl", md: "3xl" }} fontWeight="semibold" lineHeight="1.2" letterSpacing="-0.02em" color={colors.textOnDark}>
+                T&amp;P cells at every IIT and NIT
+              </Heading>
+              <Text fontSize={{ base: "md", md: "lg" }} color={colors.textOnDarkSecondary} lineHeight="1.75" maxW="lg">
+                Trusted outreach across {TNP_CELL_COUNT} campuses — {IIT_COUNT} IITs and {NIT_COUNT} NITs — aligned to
+                placement calendars and batch context.
+              </Text>
+              <Box pt={2}>
+                <PrimaryButton href={COMPANY_CONTACT_MAIL} variant="light">
+                  Talk to partnerships
+                </PrimaryButton>
+              </Box>
+            </VStack>
+            <SimpleGrid columns={2} spacing={4} flex={1} w="full" maxW="md">
+              {[
+                { n: IIT_COUNT, l: "IIT T&P ecosystems" },
+                { n: NIT_COUNT, l: "NIT T&P ecosystems" },
+              ].map(({ n, l }, i) => (
+                <motion.div
+                  key={l}
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={scrollViewport}
+                  transition={{ delay: i * 0.1, duration: 0.45 }}
+                >
+                  <Box p={6} borderRadius="xl" border="1px solid" borderColor="whiteAlpha.200" bg="whiteAlpha.50" h="full">
+                    <Text fontSize="3xl" fontWeight="semibold" letterSpacing="-0.02em">
+                      {n}
                     </Text>
-                  </CardBody>
-                </Card>
+                    <Text fontSize="sm" color={colors.textOnDarkMuted} mt={2}>
+                      {l}
+                    </Text>
+                  </Box>
+                </motion.div>
+              ))}
+            </SimpleGrid>
+          </Flex>
+        </Box>
+      </ScrollReveal>
+    </LandingContainer>
+  </Section>
+);
+
+const MiraFeaturesSection = () => {
+  const features = [
+    {
+      title: "WhatsApp-first",
+      body: "Natural chat on the channel students already use — no heavy forms on day one.",
+      icon: MessageCircle,
+    },
+    {
+      title: "Conversational profile",
+      body: "Structured data plus a readable story recruiters and T&P teams can scan in seconds.",
+      icon: Sparkles,
+    },
+    {
+      title: "Verified signal",
+      body: "Skills and projects captured in conversation, aligned with campus and role context.",
+      icon: ShieldCheck,
+    },
+    {
+      title: "Smart matching",
+      body: "When a role fits, Mira notifies the right students on WhatsApp — with consent.",
+      icon: Target,
+    },
+  ];
+
+  return (
+    <Section bg={landingLayout.pageBg}>
+      <LandingContainer>
+        <SectionHeader
+          eyebrow="Product"
+          title="Mira on WhatsApp"
+          lead="An AI agent for IIT and NIT students. Profiles stay current because they are built through conversation."
+        />
+        <ScrollStagger>
+          <SimpleGrid columns={{ base: 1, sm: 2, lg: 4 }} spacing={6}>
+            {features.map(({ title, body, icon: FeatureIcon }) => (
+              <motion.div key={title} variants={fadeUp}>
+                <Box
+                  h="full"
+                  p={8}
+                  borderRadius="xl"
+                  bg={colors.surface}
+                  border="1px solid"
+                  borderColor={colors.border}
+                  transition="border-color 0.2s, box-shadow 0.2s"
+                  _hover={{ borderColor: colors.brandBorder, shadow: "md" }}
+                >
+                  <Flex w={10} h={10} borderRadius="lg" bg={colors.brandSubtle} color={colors.brand} align="center" justify="center" mb={5}>
+                    <FeatureIcon size={20} strokeWidth={1.75} />
+                  </Flex>
+                  <Heading as="h3" size="sm" fontWeight="semibold" color={colors.text} mb={2}>
+                    {title}
+                  </Heading>
+                  <Text color={colors.textSecondary} fontSize="sm" lineHeight="1.7">
+                    {body}
+                  </Text>
+                </Box>
               </motion.div>
             ))}
           </SimpleGrid>
-        </motion.div>
-      </Container>
-    </Box>
+        </ScrollStagger>
+      </LandingContainer>
+    </Section>
   );
 };
+
+const howItWorksSteps = [
+  {
+    step: "01",
+    title: "Chat with Mira",
+    body: "On WhatsApp, share college, skills, projects, and the roles you want.",
+    icon: MessageCircle,
+  },
+  {
+    step: "02",
+    title: "Build & verify",
+    body: "Mira structures your profile and strengthens verification with campus context where available.",
+    icon: ShieldCheck,
+  },
+  {
+    step: "03",
+    title: "Get matched",
+    body: "Roles flow through OpenWorldX and T&P channels. Mira notifies you when something fits.",
+    icon: Briefcase,
+  },
+];
+
+const HowItWorksSection = () => (
+  <Section id="how-it-works" bg={landingLayout.pageBg}>
+    <LandingContainer>
+      <SectionHeader eyebrow="Process" title="How it works" lead="Simple for students. Clear for hiring teams." />
+      <ScrollStagger>
+        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={6}>
+          {howItWorksSteps.map(({ step, title, body, icon: StepIcon }) => (
+            <motion.div key={step} variants={fadeUp}>
+              <Box p={8} h="full" borderRadius="xl" bg={colors.surface} border="1px solid" borderColor={colors.border}>
+                <HStack justify="space-between" mb={6}>
+                  <Text fontSize="xs" fontWeight="semibold" color={colors.brand} letterSpacing="0.1em">
+                    STEP {step}
+                  </Text>
+                  <StepIcon size={18} color={colors.textMuted} strokeWidth={1.75} />
+                </HStack>
+                <Heading as="h3" size="md" fontWeight="semibold" mb={3} color={colors.text}>
+                  {title}
+                </Heading>
+                <Text color={colors.textSecondary} fontSize="sm" lineHeight="1.75">
+                  {body}
+                </Text>
+              </Box>
+            </motion.div>
+          ))}
+        </SimpleGrid>
+      </ScrollStagger>
+    </LandingContainer>
+  </Section>
+);
 
 const faqs = [
   {
     question: "What is OpenWorldX?",
-    answer: "OpenWorldX is India's first AI-powered social network where you can connect with people beyond your network through your AI friend Mira.",
+    answer:
+      "An AI-powered talent platform for IIT and NIT campuses. Students build job-ready profiles with Mira on WhatsApp; companies and T&P teams use those profiles to hire and place talent.",
   },
   {
-    question: "What is Mira?",
-    answer: "Mira is your personal AI friend who chats with you, understands you, and helps you connect with relevant people in the network. Mira can also blast your messages to find quick responses from people who can help.",
+    question: "Which T&P cells do you partner with?",
+    answer: `Training & Placement cells across all ${IIT_COUNT} IITs and ${NIT_COUNT} NITs — ${TNP_CELL_COUNT} campus ecosystems — plus hiring partners on OpenWorldX.`,
   },
   {
-    question: "What are Blasts?",
-    answer: "Blasts are a powerful feature where Mira shares your message with relevant people in the network and brings back instant responses. It's the fastest way to get help or find collaborators for your ideas.",
+    question: "Who is Mira?",
+    answer:
+      "Your AI career companion on WhatsApp. She learns your skills, projects, and goals over time and keeps your profile updated through conversation.",
   },
   {
-    question: "What are Reputation Levels?",
-    answer: "These are levels (Bronze, Silver, Gold, Platinum) that show how trustworthy and active you are on the platform. You start at Bronze and can level up by helping others and building a good reputation. Higher levels give you perks like better visibility and more connections.",
+    question: "How do students get opportunities?",
+    answer:
+      "Roles are shared on OpenWorldX and through your college T&P cell when applicable. When a job fits, Mira can notify you on WhatsApp with your consent.",
   },
   {
-    question: "Is OpenWorldX free to use?",
-    answer: "Yes, joining and using OpenWorldX is completely free. You can sign up, connect with people using Mira, and build your reputation without any upfront costs.",
+    question: "How can companies or T&P offices work with us?",
+    answer:
+      "Email us to post roles, run campus campaigns, or pilot a partnership. We help you reach the right batches with structured profiles.",
   },
   {
-    question: "Who can join OpenWorldX?",
-    answer: "Anyone can join! Whether you are a student looking to learn new skills, a professional seeking collaborations, or someone who wants to expand their network — OpenWorldX is for everyone who wants to connect beyond their immediate circle.",
-  },
-  {
-    question: "How does the reputation system work?",
-    answer: "After each conversation, you exchange reputation scores with the other user. The more people you help and the better your interactions, the higher your reputation grows. Higher reputation unlocks new levels and opportunities.",
+    question: "Is it free for students?",
+    answer: "Yes. Chatting with Mira and building your profile is free for students.",
   },
 ];
 
-const FAQ = () => {
-  return (
-    <Box 
-      as="section" 
-      bg="white" 
-      minH="100vh"
-      display="flex"
-      alignItems="center"
-      py={20}
-    >
-      <Container maxW="6xl">
-        <VStack textAlign="center" spacing={6} mb={12}>
-          <Heading 
-            as="h2" 
-            size={{ base: '2xl', md: '3xl', lg: '3xl' }} 
-            fontWeight="bold" 
-            bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
-            bgClip="text"
-          >
-            Frequently Asked Questions
-          </Heading>
-          <Text color="gray.600" fontSize={{ base: 'lg', md: 'xl' }} maxW="2xl" mx="auto">
-            Everything you need to know about OpenWorldX and Mira.
-          </Text>
-        </VStack>
+const FAQ = () => (
+  <Section id="faq" bg={colors.surface}>
+    <LandingContainer maxW="3xl">
+      <SectionHeader eyebrow="FAQ" title="Common questions" lead="For students, companies, and campus partners." mb={{ base: 8, md: 10 }} />
+      <ScrollStagger>
         <Accordion allowToggle>
           {faqs.map((faq, index) => (
-            <AccordionItem 
-              key={index} 
-              border="1px solid" 
-              borderColor="gray.200"
-              rounded="xl" 
-              p={6} 
-              bg="white" 
-              shadow="base" 
-              mb={4}
-              _hover={{ shadow: 'md' }}
-              transition="all 0.3s"
-            >
-              <AccordionButton 
-                w="full" 
-                textAlign="left" 
-                justifyContent="space-between" 
-                fontWeight="semibold" 
-                color="gray.800" 
-                fontSize={{ base: 'lg', md: 'xl' }}
-                py={4}
-                _hover={{ bg: 'transparent' }}
-              >
+            <motion.div key={index} variants={fadeUp}>
+          <AccordionItem
+            border="none"
+            borderBottom="1px solid"
+            borderColor={colors.border}
+            py={2}
+            _last={{ borderBottom: "none" }}
+          >
+            <AccordionButton py={5} px={0} _hover={{ bg: "transparent" }}>
+              <Box flex="1" textAlign="left" fontWeight="medium" color={colors.text} fontSize={{ base: "md", md: "lg" }}>
                 {faq.question}
-                <AccordionIcon color="blue.600" fontSize="2xl" />
-              </AccordionButton>
-              <AccordionPanel mt={3} color="gray.600" fontSize={{ base: 'md', md: 'lg' }} lineHeight="1.6">
-                {faq.answer}
-              </AccordionPanel>
-            </AccordionItem>
-          ))}
+              </Box>
+              <AccordionIcon color={colors.textMuted} />
+            </AccordionButton>
+            <AccordionPanel px={0} pb={5} color={colors.textSecondary} lineHeight="1.75" fontSize="md">
+              {faq.answer}
+            </AccordionPanel>
+          </AccordionItem>
+            </motion.div>
+        ))}
         </Accordion>
-      </Container>
-    </Box>
-  );
-};
+      </ScrollStagger>
+    </LandingContainer>
+  </Section>
+);
 
-const testimonials = [
-  {
-    text: "OpenWorldX made it simple for me to find people who share my interests. Mira is amazing!",
-    imageSrc: "/avatar-1.jpeg",
-    name: "Ishita",
-    username: "@Ishita",
-  },
-  {
-    text: "The reputation system motivates me to help more people. Can't wait to reach Platinum level!",
-    imageSrc: "/avatar-2.jpeg",
-    name: "Aditya",
-    username: "@Aditya",
-  },
-  {
-    text: "I've met incredible people through Mira. The Blasts feature helped me get instant responses!",
-    imageSrc: "/avatar-3.jpeg",
-    name: "Kiran",
-    username: "@Kiran",
-  },
-  {
-    text: "Finally a social network that helps me connect beyond my circle. OpenWorldX is revolutionary.",
-    imageSrc: "/avatar-4.jpeg",
-    name: "Kavya",
-    username: "@Kavya",
-  },
-  {
-    text: "Mira understands me better than any algorithm. The connections I've made are truly meaningful.",
-    imageSrc: "/avatar-5.jpeg",
-    name: "Rohan",
-    username: "@Rohan",
-  },
-  {
-    text: "Instead of scrolling endlessly, I now connect with people who actually need my help.",
-    imageSrc: "/avatar-6.jpeg",
-    name: "Aarav",
-    username: "@Aarav",
-  },
-  {
-    text: "The reputation levels make it exciting to grow your impact in the community.",
-    imageSrc: "/avatar-7.jpeg",
-    name: "Vihaan",
-    username: "@Vihaan",
-  },
-  {
-    text: "Blasts helped me find collaborators for my project within minutes. This is the future!",
-    imageSrc: "/avatar-8.jpeg",
-    name: "Diya",
-    username: "@Diya",
-  },
-  {
-    text: "Finally, a place where AI actually helps you build meaningful connections.",
-    imageSrc: "/avatar-9.jpeg",
-    name: "Siddharth",
-    username: "@Siddharth",
-  },
-];
-
-const firstColumn = testimonials.slice(0, 3);
-const secondColumn = testimonials.slice(3, 6);
-const thirdColumn = testimonials.slice(6, 9);
-
-const TestimonialsColumn = (props) => (
-  <Box display={props.display} flex={1}>
-    <motion.div
-      animate={{ translateY: "-50%" }}
-      transition={{
-        duration: props.duration || 10,
-        repeat: Infinity,
-        ease: "linear",
-        repeatType: "loop",
-      }}
-      display="flex"
-      flexDir="column"
-      gap={6}
-      pb={6}
-    >
-      {[...new Array(2)].fill(0).map((_, arrayIndex) => (
-        <Fragment key={arrayIndex}>
-          {props.testimonials.map(({ text, imageSrc, name, username }, i) => (
-            <Card
-              key={`${arrayIndex}-${i}`}
-              p={8}
-              borderWidth={1}
-              borderColor="gray.100"
-              borderRadius="3xl"
-              shadow="xl"
-              maxW="sm"
-              w="full"
-              bg="white"
-              mx="auto"
-              _hover={{
-                shadow: '2xl',
-                transform: 'translateY(-4px)',
-                transition: 'all 0.3s ease'
-              }}
+const CallToAction = () => (
+  <Section bg={landingLayout.pageBg}>
+    <LandingContainer maxW="5xl">
+      <VStack spacing={10} w="full">
+        <SectionHeader
+          eyebrow="Get started"
+          title="Pick your path"
+          lead="Students and hiring teams use the same platform — different entry points."
+          mb={0}
+        />
+        <ScrollStagger>
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={6} w="full">
+          <motion.div variants={fadeUp}>
+            <VStack
+              align="stretch"
+              spacing={6}
+              p={{ base: 8, md: 10 }}
+              borderRadius="2xl"
+              bg={colors.surface}
+              border="1px solid"
+              borderColor={colors.border}
+              textAlign="left"
+              h="full"
             >
-              <Text color="gray.800" fontSize="lg" lineHeight="1.6">
-                &quot;{text}&quot;
-              </Text>
-              <Flex align="center" gap={4} mt={6}>
-                <Image
-                  src={imageSrc}
-                  alt={name}
-                  h={12}
-                  w={12}
-                  borderRadius="full"
-                  objectFit="cover"
-                />
-                <VStack align="flex-start" spacing={1}>
-                  <Text fontWeight="semibold" fontSize="lg" color="gray.900">
-                    {name}
-                  </Text>
-                  <Text color="gray.600" fontSize="md">
-                    {username}
-                  </Text>
-                </VStack>
-              </Flex>
-            </Card>
-          ))}
-        </Fragment>
-      ))}
-    </motion.div>
+              <Box>
+                <Text fontSize="xs" fontWeight="semibold" letterSpacing="0.12em" textTransform="uppercase" color={colors.whatsapp}>
+                  Students
+                </Text>
+                <Heading as="h3" size="md" mt={2} fontWeight="semibold" color={colors.text}>
+                  Meet Mira on WhatsApp
+                </Heading>
+                <Text color={colors.textSecondary} mt={3} fontSize="sm" lineHeight="1.75">
+                  Start a conversation and build your profile in minutes.
+                </Text>
+              </Box>
+              {WHATSAPP_HREF && <WhatsAppButton href={WHATSAPP_HREF}>Chat with Mira</WhatsAppButton>}
+            </VStack>
+          </motion.div>
+          <motion.div variants={fadeUp}>
+            <VStack
+              align="stretch"
+              spacing={6}
+              p={{ base: 8, md: 10 }}
+              borderRadius="2xl"
+              bg={colors.surfaceDark}
+              color={colors.textOnDark}
+              textAlign="left"
+              h="full"
+            >
+              <Box>
+                <Text fontSize="xs" fontWeight="semibold" letterSpacing="0.12em" textTransform="uppercase" color={colors.brandOnDark}>
+                  Companies &amp; T&amp;P
+                </Text>
+                <Heading as="h3" size="md" mt={2} fontWeight="semibold" color={colors.textOnDark}>
+                  Hire or partner
+                </Heading>
+                <Text color={colors.textOnDarkSecondary} mt={3} fontSize="sm" lineHeight="1.75">
+                  Post roles and access matched IIT + NIT talent.
+                </Text>
+              </Box>
+              <PrimaryButton asRouter to="/hire" variant="light">
+                Find matched talent
+              </PrimaryButton>
+            </VStack>
+          </motion.div>
+        </SimpleGrid>
+        </ScrollStagger>
+      </VStack>
+    </LandingContainer>
+  </Section>
+);
+
+const Footer = () => (
+  <Box as="footer" bg={colors.surfaceDark} color={colors.textOnDarkMuted} py={{ base: 14, md: 18 }}>
+    <LandingContainer>
+      <VStack spacing={10} align="stretch">
+        <Flex direction={{ base: "column", md: "row" }} justify="space-between" gap={10} align={{ base: "center", md: "flex-start" }}>
+          <VStack align={{ base: "center", md: "flex-start" }} spacing={3} maxW="sm" textAlign={{ base: "center", md: "left" }}>
+            <Heading as="p" size="lg" color={colors.textOnDark} fontWeight="semibold">
+              OpenWorldX
+            </Heading>
+            <Text fontSize="sm" lineHeight="1.75" color={colors.textOnDarkSecondary}>
+              IIT + NIT talent platform — conversational profiles, campus T&amp;P partnerships, hiring for teams that
+              need signal, not noise.
+            </Text>
+            <IncubatorTrustLine size="sm" textAlign={{ base: "center", md: "left" }} />
+          </VStack>
+          <Flex flexWrap="wrap" justify={{ base: "center", md: "flex-end" }} gap={{ base: 4, md: 8 }} fontSize="sm">
+            {[
+              ["#students", "Students"],
+              ["#companies", "Companies"],
+              ["#audience", "Who it's for"],
+              ["#partners", "T&P network"],
+              ["#how-it-works", "How it works"],
+              ["#faq", "FAQ"],
+            ].map(([href, label]) => (
+              <Link key={href} href={href} color={colors.textOnDarkMuted} _hover={{ color: colors.textOnDark }}>
+                {label}
+              </Link>
+            ))}
+            <Link href={COMPANY_CONTACT_MAIL} color={colors.textOnDarkMuted} _hover={{ color: colors.textOnDark }}>
+              Contact
+            </Link>
+          </Flex>
+        </Flex>
+        <Divider borderColor="whiteAlpha.200" />
+        <Flex direction={{ base: "column", md: "row" }} justify="space-between" align="center" gap={6}>
+          <HStack spacing={3}>
+            <SocialIconLink href="https://www.linkedin.com/company/harinath-mechtech-innovations-private-limited/" label="LinkedIn">
+              <Image src="/social-linkedin.svg" alt="" w={5} h={5} filter="invert(1)" opacity={0.7} />
+            </SocialIconLink>
+            <SocialIconLink href="https://www.youtube.com/@Openworldtradetime" label="YouTube">
+              <Image src="/social-youtube.svg" alt="" w={5} h={5} filter="invert(1)" opacity={0.7} />
+            </SocialIconLink>
+            <SocialIconLink href="https://www.instagram.com/akhileshh.7" label="Instagram">
+              <Image src="/social-insta.svg" alt="" w={5} h={5} filter="invert(1)" opacity={0.7} />
+            </SocialIconLink>
+          </HStack>
+          <Text fontSize="xs" color={colors.textOnDarkMuted} textAlign="center">
+            © {new Date().getFullYear()} {COMPANY_LEGAL_NAME}
+          </Text>
+        </Flex>
+      </VStack>
+    </LandingContainer>
   </Box>
 );
 
-const Testimonials = () => {
-  return (
-    <Box as="section" bg="gray.50" minH="100vh" display="flex" alignItems="center" py={20}>
-      <Container maxW="7xl">
-        <VStack spacing={8} textAlign="center" mb={16}>
-          <Text
-            fontSize="md"
-            px={4}
-            py={2}
-            borderWidth={1}
-            borderColor="gray.200"
-            borderRadius="full"
-            letterSpacing="tight"
-            fontWeight="medium"
-            bg="white"
-            shadow="base"
-          >
-            Testimonials
-          </Text>
-          <Heading
-            as="h2"
-            fontSize={{ base: "3xl", md: "5xl", lg: "6xl" }}
-            lineHeight="tight"
-            fontWeight="bold"
-            letterSpacing="tighter"
-            bgGradient="linear(to-b, gray.900, blue.900)"
-            bgClip="text"
-            maxW="4xl"
-            mx="auto"
-          >
-            What our community says
-          </Heading>
-          <Text
-            fontSize={{ base: "lg", md: "xl" }}
-            lineHeight="1.6"
-            letterSpacing="tight"
-            color="gray.700"
-            maxW="2xl"
-            mx="auto"
-          >
-            OpenWorldX is not just about connecting — it's about building trust,
-            reputation, and meaningful relationships with the help of AI.
-          </Text>
-        </VStack>
-        
-        <Box
-          position="relative"
-          h="800px"
-          overflow="hidden"
-          sx={{
-            maskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)',
-            WebkitMaskImage: 'linear-gradient(to bottom, transparent, black 10%, black 90%, transparent)'
-          }}
-        >
-          <Flex
-            justify="center"
-            gap={8}
-            h="full"
-            position="absolute"
-            top={0}
-            left={0}
-            right={0}
-          >
-            <TestimonialsColumn testimonials={firstColumn} duration={20} display="block" />
-            <TestimonialsColumn
-              testimonials={secondColumn}
-              duration={25}
-              display={{ base: "none", md: "block" }}
-            />
-            <TestimonialsColumn
-              testimonials={thirdColumn}
-              duration={22}
-              display={{ base: "none", lg: "block" }}
-            />
-          </Flex>
-        </Box>
-      </Container>
-    </Box>
-  );
-};
-
-const CallToAction = () => {
-  const sectionRef = useRef(null);
-  const { scrollYProgress } = useScroll({ 
-    target: sectionRef, 
-    offset: ["start end", "end start"] 
-  });
-  const translateY = useTransform(scrollYProgress, [0, 1], [100, -100]);
-
-  return (
-    <Box 
-      as="section" 
-      ref={sectionRef} 
-      minH="80vh"
-      display="flex"
-      alignItems="center"
-      bgGradient="linear(to-b, white, #E6F0FF)" 
-      py={24}
-      overflowX="clip"
-      position="relative"
-    >
-      <Container maxW="4xl" position="relative">
-        <VStack textAlign="center" spacing={8}>
-          {/* Background Elements */}
-          <motion.div 
-            style={{ translateY }} 
-            className="absolute top-[-5rem] left-[-5rem] w-80 h-80 bg-blue-100 rounded-full blur-[40px] opacity-60" 
-          />
-          <motion.div 
-            style={{ translateY: useTransform(scrollYProgress, [0, 1], [-100, 100]) }} 
-            className="absolute bottom-[-5rem] right-[-5rem] w-80 h-80 bg-purple-100 rounded-full blur-[40px] opacity-60" 
-          />
-          
-          <Heading 
-            as="h2" 
-            size={{ base: '2xl', md: '3xl', lg: '4xl' }} 
-            fontWeight="bold" 
-            bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
-            bgClip="text"
-            maxW="3xl"
-          >
-            Join OpenWorldX Today
-          </Heading>
-          <Text 
-            color="gray.700" 
-            fontSize={{ base: 'lg', md: 'xl' }} 
-            maxW="2xl" 
-            mx="auto"
-            lineHeight="1.6"
-          >
-            Be part of India&apos;s first AI-powered social network. Let Mira help you connect with the right people, grow your reputation, and expand your network beyond boundaries.
-          </Text>
-          <Flex 
-            gap={6} 
-            mt={8} 
-            justify="center"
-            direction={{ base: 'column', sm: 'row' }}
-            w="full"
-            maxW="md"
-            mx="auto"
-          >
-            <Button 
-              as={RouterLink} 
-              to="/auth" 
-              px={8} 
-              py={4}
-              size="lg"
-              borderRadius="2xl" 
-              bgGradient="linear(to-r, blue.600)" 
-              color="white" 
-              fontWeight="semibold" 
-              shadow="xl" 
-              _hover={{ 
-                transform: 'scale(1.05)',
-                shadow: '2xl'
-              }}
-              transition="all 0.3s"
-              flex={1}
-            >
-              Get Started
-            </Button>
-            <Button 
-              as="a"
-              href="https://play.google.com/store/apps/details?id=com.openworldx.openworld"
-              target="_blank"
-              rel="noopener noreferrer"
-              px={8} 
-              py={4}
-              size="lg"
-              borderRadius="2xl" 
-              bg="white" 
-              border="2px solid" 
-              borderColor="gray.300" 
-              color="gray.800" 
-              fontWeight="semibold" 
-              shadow="base" 
-              _hover={{ 
-                shadow: 'md',
-                bg: "gray.50"
-              }}
-              transition="all 0.3s"
-              flex={1}
-            >
-              Download App
-            </Button>
-          </Flex>
-        </VStack>
-      </Container>
-    </Box>
-  );
-};
-
-const Footer = () => {
-  return (
-    <Box as="footer" bg="black" color="gray.300" py={16}>
-      <Container maxW="6xl">
-        <VStack spacing={8} textAlign="center">
-          <Heading 
-              as="h2" 
-              size={{ base: '2xl', md: '3xl' }} 
-              fontWeight="bold" 
-              bgGradient="linear(to-r, #0f172a, #1e3a8a, #4338ca)" 
-              bgClip="text"
-            >
-              OpenWorldX
-            </Heading>
-            <Text 
-              fontSize={{ base: 'md', lg: 'lg' }} 
-              color="gray.400" 
-              maxW="2xl" 
-              mx="auto"
-              lineHeight="1.7"
-            >
-              India&apos;s first AI-powered social network — connect beyond your circle, grow your reputation, and discover new opportunities with the help of <strong>Mira</strong>, your AI friend.
-            </Text>
-          <Flex 
-            flexWrap="wrap" 
-            justify="center" 
-            gap={6} 
-            fontSize={{ base: 'sm', md: 'md' }}
-            color="gray.400"
-          >
-            <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              About
-            </Link>
-            <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              How It Works
-            </Link>
-            <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Mira AI
-            </Link>
-            <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Reputation Levels
-            </Link>
-            <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Blasts
-            </Link>
-            <Link href="#" _hover={{ color: 'white', textDecoration: 'underline' }}>
-              Careers
-            </Link>
-          </Flex>
-          <Flex justify="center" gap={6}>
-            <Link 
-              href="https://www.linkedin.com/company/harinath-mechtech-innovations-private-limited/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              _hover={{ transform: 'scale(1.1)' }}
-              transition="transform 0.2s"
-            >
-              <Image src="/social-linkedin.svg" alt="LinkedIn" w={6} h={6} filter="invert(1)" _hover={{ opacity: 0.8 }} />
-            </Link>
-            <Link 
-              href="https://www.youtube.com/@Openworldtradetime" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              _hover={{ transform: 'scale(1.1)' }}
-              transition="transform 0.2s"
-            >
-              <Image src="/social-youtube.svg" alt="YouTube" w={6} h={6} filter="invert(1)"  _hover={{ opacity: 0.8 }} />
-            </Link>
-            <Link 
-              href="https://www.instagram.com/akhileshh.7" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              _hover={{ transform: 'scale(1.1)' }}
-              transition="transform 0.2s"
-            >
-              <Image src="/social-insta.svg" alt="Instagram" w={6} h={6} filter="invert(1)"  _hover={{ opacity: 0.8 }} />
-            </Link>
-          </Flex>
-          <Text fontSize="sm" color="gray.500" pt={4} borderTop="1px solid" borderColor="gray.700" w="full" maxW="3xl" mx="auto">
-            &copy; {new Date().getFullYear()} {COMPANY_LEGAL_NAME}. All rights reserved.
-          </Text>
-        </VStack>
-      </Container>
-    </Box>
-  );
-};
-
-const LandingPage = () => {
-  return (
-    <Box w="100%" minH="100vh">
-      <Header />
-      <Hero />
-      <FeaturesSection />
-      <FAQ />
-      <Testimonials />
-      <CallToAction />
-      <Footer />
-    </Box>
-  );
-};
+const LandingPage = () => (
+  <Box w="100%" minH="100vh" bg={landingLayout.pageBg} overflowX="hidden">
+    <LandingHeader />
+    <Hero />
+    <StatsStrip />
+    <StudentExperienceShowcase />
+    <PartnersSection />
+    <MiraFeaturesSection />
+    <AudienceSection whatsappHref={WHATSAPP_HREF} mailHref={COMPANY_CONTACT_MAIL} />
+    <HowItWorksSection />
+    <FAQ />
+    <CallToAction />
+    <Footer />
+  </Box>
+);
 
 export default LandingPage;

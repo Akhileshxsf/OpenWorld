@@ -29,6 +29,7 @@
     "lodash": "^4.17.21",
     "lucide-react": "^0.544.0",
     "particles.js": "^2.0.0",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-confetti": "^6.4.0",
     "react-dom": "^18.2.0",

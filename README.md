@@ -1,30 +1,26 @@
 # OpenWorld
 
-OpenWorld is a React site plus a WhatsApp agent named Mira. The site is the product. The agent lives in `functions/` and replies on WhatsApp through Meta and Gupshup.
+OpenWorld is a React site plus a WhatsApp agent named Mira. The site is the product. The agent lives in `functions/` and replies on WhatsApp through **Meta Cloud API** (production).
 
-The live WhatsApp number is **+91 98771 74681**. That path uses Meta Cloud API. An older Gupshup number is still in the code, but Meta blocks its sends until the display name is approved.
+The live WhatsApp number is **+91 98771 74681**. First-time texters get a welcome with an **Upload resume** button linking to `/upload-resume`. Legacy Gupshup code (`whatsappWebhook`) remains in the repo but is **not used** right now.
 
 ## WhatsApp agent
 
-Someone texts the business number. Meta or Gupshup POSTs that event to a Firebase Cloud Function. The function asks Groq for Mira's reply, sends the text back, and saves the turn in Firestore.
+Someone texts the business number. Meta POSTs that event to a Firebase Cloud Function. The function asks Groq for Mira's reply, sends the text back, and saves the turn in Firestore.
 
 ```
 Phone
-  -> WhatsApp
-    -> Meta or Gupshup
-      -> Cloud Function
-        -> Groq
-        -> Firestore
-      -> reply back through Meta or Gupshup
+  -> WhatsApp (Meta)
+    -> metaWhatsappWebhook
+      -> Groq + Firestore
+      -> reply via Meta
     -> Phone
 ```
-
-Two webhooks share Mira, Groq, and Firestore. They do not share the send API.
 
 | Path | Function | Who calls it |
 | --- | --- | --- |
 | Meta, live number | `metaWhatsappWebhook` | Meta Cloud API |
-| Gupshup, older number | `whatsappWebhook` | Gupshup |
+| Legacy (unused) | `whatsappWebhook` | Gupshup |
 
 Meta URL: `https://asia-south1-openworld-8f410.cloudfunctions.net/metaWhatsappWebhook`
 
