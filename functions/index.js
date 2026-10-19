@@ -1,4 +1,6 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { onRequest } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 
 setGlobalOptions({
@@ -33,6 +35,15 @@ function parseRequestBody(req) {
   } catch {
     return { raw };
   }
+}
+
+/** Meta signs webhook bodies with the app secret; without META_APP_SECRET the check is skipped. */
+function hasValidMetaSignature(req) {
+  const secret = process.env.META_APP_SECRET;
+  if (!secret) return true;
+  const header = String(req.get("x-hub-signature-256") || "");
+  const expected = `sha256=${createHmac("sha256", secret).update(req.rawBody || Buffer.alloc(0)).digest("hex")}`;
+  return header.length === expected.length && timingSafeEqual(Buffer.from(header), Buffer.from(expected));
 }
 
 export const whatsappWebhook = onRequest(
@@ -100,12 +111,19 @@ export const metaWhatsappWebhook = onRequest(
       return;
     }
 
+    if (!hasValidMetaSignature(req)) {
+      console.warn("meta webhook rejected: bad signature");
+      res.status(401).send("Invalid signature");
+      return;
+    }
+
     try {
       const body = parseRequestBody(req);
       console.log("meta webhook hit", {
         object: body.object || "",
         hasAccessToken: Boolean(process.env.META_ACCESS_TOKEN),
-        phoneNumberId: process.env.META_PHONE_NUMBER_ID || "",
+        phoneNumberId: body.entry?.[0]?.changes?.[0]?.value?.metadata?.phone_number_id || "",
+        wabaId: body.entry?.[0]?.id || "",
         entries: Array.isArray(body.entry) ? body.entry.length : 0,
       });
       const { handleMetaWebhook } = await import("./handleMetaWebhook.js");
@@ -138,10 +156,15 @@ export const hireApi = onRequest(
 
     try {
       const body = parseRequestBody(req);
-      const { handleHireMatch, handleHireIntroRequest } = await import("./hireMatch.js");
-      const result = req.path.endsWith("/intro")
-        ? await handleHireIntroRequest(body)
-        : await handleHireMatch(body);
+      const { handleHireMatch, handleGetJob, handleReachOut } = await import("./hireMatch.js");
+      const action = req.path.split("/").filter(Boolean).pop();
+      const ip = String(req.get("x-forwarded-for") || req.ip || "").split(",")[0].trim();
+      const result =
+        action === "job"
+          ? await handleGetJob(body)
+          : action === "reach-out" || action === "intro"
+            ? await handleReachOut(body)
+            : await handleHireMatch(body, { ip, userAgent: req.get("user-agent") || "" });
       res.status(200).json(result);
     } catch (error) {
       console.error("hireApi failed", req.path, error);
@@ -176,5 +199,19 @@ export const whatsappResumeUpload = onRequest(
       console.error("whatsappResumeUpload failed", error);
       res.status(400).json({ error: error.message || "Upload failed" });
     }
+  }
+);
+
+export const dailyCandidateJobs = onSchedule(
+  {
+    schedule: "0 8-22/2 * * *",
+    timeZone: "Asia/Kolkata",
+    timeoutSeconds: 300,
+    memory: "512MiB",
+  },
+  async () => {
+    const { runDailyCandidateJobs } = await import("./scheduled.js");
+    const result = await runDailyCandidateJobs();
+    console.log("daily candidate jobs", result);
   }
 );

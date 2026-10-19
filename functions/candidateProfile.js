@@ -50,10 +50,11 @@ ${schemaPromptDescription()}
 
 Rules:
 - Merge NEW facts from the user's latest message into the profile.
-- From chat, capture when mentioned: careerGoals, locationPreference, currentCtc, expectedCtc, target roles, timeline, remote preference — and weave them into profileText (still third-person, still detailed).
+- From chat, capture when mentioned: careerGoals, locationPreference, currentCtc, expectedCtc, availability, employmentType, jobSeekingStatus, target roles, remote preference — and weave them into profileText (still third-person, still detailed).
+- If the user corrects something from their resume (e.g. "my graduation year is 2026", "I don't know Java"), apply the correction.
 - Always rewrite profileText to reflect resume facts PLUS all chat facts (goals, location preference, current/expected CTC, etc.); do not shrink to a short blurb.
 - Do not remove resume-derived fields unless the user explicitly corrects them.
-- Leave currentCtc / expectedCtc / locationPreference / careerGoals empty until the user states them in chat.
+- Leave currentCtc / expectedCtc / locationPreference / careerGoals / availability / employmentType / jobSeekingStatus empty until the user states them in chat.
 - profileCompleteness: higher when resume is parsed AND goals + location preference + salary expectations are known.
 - Jobs only; ignore social networking topics.
 

@@ -1,15 +1,18 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createRequire } from "node:module";
 import { FieldValue } from "firebase-admin/firestore";
 import { getDb } from "./firebaseAdmin.js";
 import { groqJsonPrompt } from "./groqJson.js";
+import { INTROS, OFFERABLE, createIntro, getOpenIntros, introId, offerIntro } from "./intros.js";
+import { parseRecruiterQuestions } from "./introQuestions.js";
 
 const require = createRequire(import.meta.url);
 // The package root runs a debug self-test when it has no module.parent (true under createRequire).
 const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 
 const JOBS = "hiringJobs";
-const INTRO_REQUESTS = "hiringIntroRequests";
+const AUTO_OFFER_MIN_SCORE = 75;
+const AUTO_OFFERS_PER_JOB = 3;
 const MAX_JD_BYTES = 8 * 1024 * 1024;
 const MAX_JD_CHARS = 12000;
 const SHORTLIST_SIZE = 15;
@@ -182,7 +185,31 @@ Output JSON only: {"matches": [ ... ]}`.trim();
   });
 }
 
-export async function handleHireMatch(body) {
+const SEARCH_LIMITS = { email: 20, ip: 40 };
+
+/** Contact details are visible in results, so searches are capped per email and per IP each day. */
+async function enforceSearchLimit(firestore, { email, ip }) {
+  const day = new Date().toISOString().slice(0, 10);
+  const keys = [
+    ["email", email],
+    ["ip", ip],
+  ].filter(([, value]) => value);
+
+  await firestore.runTransaction(async (tx) => {
+    const refs = keys.map(([kind, value]) =>
+      firestore.collection("hireRateLimits").doc(createHash("sha256").update(`${kind}:${value}:${day}`).digest("hex").slice(0, 40))
+    );
+    const snaps = await Promise.all(refs.map((ref) => tx.get(ref)));
+    snaps.forEach((snap, i) => {
+      if ((snap.data()?.count || 0) >= SEARCH_LIMITS[keys[i][0]]) {
+        throw new Error("You've reached today's search limit. Please try again tomorrow or contact us.");
+      }
+    });
+    refs.forEach((ref, i) => tx.set(ref, { kind: keys[i][0], day, count: (snaps[i].data()?.count || 0) + 1 }, { merge: true }));
+  });
+}
+
+export async function handleHireMatch(body, meta = {}) {
   const contact = {
     companyName: clean(body.companyName, 120),
     contactName: clean(body.contactName, 120),
@@ -199,6 +226,9 @@ export async function handleHireMatch(body) {
   const firestore = getDb();
   if (!firestore) throw new Error("Database unavailable");
 
+  const requester = { ip: clean(meta.ip, 64), userAgent: clean(meta.userAgent, 200) };
+  await enforceSearchLimit(firestore, { email: contact.email, ip: requester.ip });
+
   const [jd, snap] = await Promise.all([
     parseJobDescription(jdText),
     firestore.collection("whatsappCandidates").get(),
@@ -206,7 +236,8 @@ export async function handleHireMatch(body) {
 
   const pool = snap.docs
     .map((doc) => ({ phone: doc.id, candidate: doc.data() }))
-    .filter(({ candidate }) => candidate.profileText || (candidate.skills || []).length);
+    .filter(({ candidate }) => candidate.profileText || (candidate.skills || []).length)
+    .filter(({ candidate }) => candidate.jobSeekingStatus !== "not_looking");
 
   const shortlist = pool
     .map(({ phone, candidate }) => ({ phone, candidate, ...preScore(candidate, jd) }))
@@ -222,59 +253,178 @@ export async function handleHireMatch(body) {
     .map((m) => ({ ...m, matchId: randomUUID() }));
 
   const jobRef = firestore.collection(JOBS).doc();
-  await jobRef.set({
+  const accessKey = randomBytes(18).toString("base64url");
+  const job = {
     ...contact,
+    accessKey,
+    requester,
     jdText: jdText.slice(0, 50000),
     jdFileName: clean(body.fileName, 200),
     parsed: jd,
     poolSize: pool.length,
-    matches: top.map((m) => ({ matchId: m.matchId, phone: m.phone, score: m.score })),
-    createdAt: FieldValue.serverTimestamp(),
-  });
-
-  return {
-    jobId: jobRef.id,
-    job: jd,
-    poolSize: pool.length,
     matches: top.map((m) => ({
       matchId: m.matchId,
+      phone: m.phone,
       score: m.score,
       headline: m.headline,
       reasons: m.reasons,
       gaps: m.gaps,
       matchedSkills: m.matchedSkills,
-      ...anonymize(m.candidate),
     })),
+    createdAt: FieldValue.serverTimestamp(),
+  };
+  await jobRef.set(job);
+
+  if (process.env.AUTO_OFFER_STRONG_MATCHES === "true") {
+    const autoOffers = await autoOfferStrongMatches(jobRef.id, job);
+    if (autoOffers.length) await jobRef.set({ autoOffers }, { merge: true });
+  }
+
+  return { ...(await buildJobView(jobRef.id, job)), accessKey };
+}
+
+/** Strong matches hear about a new role right away; one pending offer per candidate at a time. */
+async function autoOfferStrongMatches(jobId, job) {
+  const strong = job.matches.filter((m) => m.score >= AUTO_OFFER_MIN_SCORE).slice(0, AUTO_OFFERS_PER_JOB);
+  const results = [];
+  for (const match of strong) {
+    try {
+      const open = await getOpenIntros(match.phone);
+      if (open.some((i) => i.status === "awaiting_candidate")) {
+        results.push({ matchId: match.matchId, skipped: "offer_pending" });
+        continue;
+      }
+      const { intro, created } = await createIntro({ jobId, job, match, source: "auto" });
+      if (!created) continue;
+      const delivery = await offerIntro(intro);
+      results.push({ matchId: match.matchId, delivered: delivery.delivered, reason: delivery.reason || null });
+    } catch (error) {
+      console.error("auto offer failed", jobId, match.matchId, error.message);
+      results.push({ matchId: match.matchId, error: error.message.slice(0, 200) });
+    }
+  }
+  return results;
+}
+
+function contactView(phone, candidate, resume) {
+  return {
+    name: clean(candidate.displayName, 120),
+    phone: `+${phone}`,
+    whatsappUrl: `https://wa.me/${phone}`,
+    email: clean(candidate.email, 160),
+    resumeUrl: resume?.resumeUrl || "",
+    linkedInUrl: clean(candidate.linkedInUrl, 300),
+    githubUrl: clean(candidate.githubUrl, 300),
+    portfolioUrl: clean(candidate.portfolioUrl, 300),
   };
 }
 
-export async function handleHireIntroRequest(body) {
+function profileView(candidate) {
+  return {
+    ...anonymize(candidate),
+    companies: (candidate.companies || []).slice(0, 6),
+    projects: (candidate.projects || []).slice(0, 6),
+    summary: clean(candidate.profileText, 2500),
+    lookingFor: clean(candidate.careerGoals, 200),
+    employmentType: clean(candidate.employmentType, 40),
+    expectedCtc: clean(candidate.expectedCtc, 60),
+    availability: clean(candidate.availability, 120),
+  };
+}
+
+function introView(intro) {
+  if (!intro) return null;
+  const questions = (intro.questions || []).map((q) => ({
+    text: q.text,
+    answer: q.status === "answered" ? q.answer : "",
+    status: q.status,
+  }));
+  return {
+    status: intro.status,
+    delivery: intro.offerDelivery?.reason || null,
+    note: intro.recruiterNote || "",
+    questions,
+    candidateQuestions: intro.candidateQuestions || [],
+    declineReason: intro.declineReason || null,
+    partial: Boolean(intro.partial),
+  };
+}
+
+/** Results as the recruiter sees them: current profile + contact + intro status for each match. */
+export async function buildJobView(jobId, job) {
+  const firestore = getDb();
+  const matches = job.matches || [];
+  const phones = matches.map((m) => m.phone);
+  const [candidateSnaps, resumeSnaps, introSnaps] = await Promise.all([
+    phones.length ? firestore.getAll(...phones.map((p) => firestore.collection("whatsappCandidates").doc(p))) : [],
+    phones.length ? firestore.getAll(...phones.map((p) => firestore.collection("whatsappResumes").doc(p))) : [],
+    matches.length ? firestore.getAll(...matches.map((m) => firestore.collection(INTROS).doc(introId(jobId, m.matchId)))) : [],
+  ]);
+
+  return {
+    jobId,
+    job: job.parsed,
+    poolSize: job.poolSize,
+    matches: matches.map((m, i) => {
+      const candidate = candidateSnaps[i]?.data() || {};
+      const intro = introSnaps[i]?.exists ? introSnaps[i].data() : null;
+      return {
+        matchId: m.matchId,
+        score: m.score,
+        headline: m.headline || "",
+        reasons: m.reasons || [],
+        gaps: m.gaps || [],
+        matchedSkills: m.matchedSkills || [],
+        paused: candidate.jobSeekingStatus === "not_looking",
+        ...profileView(candidate),
+        contact: contactView(m.phone, candidate, resumeSnaps[i]?.data()),
+        intro: introView(intro),
+      };
+    }),
+  };
+}
+
+async function loadAuthorizedJob(body) {
   const jobId = clean(body.jobId, 100);
-  const matchId = clean(body.matchId, 100);
-  if (!jobId || !matchId) throw new Error("Missing job or candidate.");
+  const key = clean(body.key, 100);
+  if (!jobId || !key) throw new Error("This results link is incomplete.");
 
   const firestore = getDb();
   if (!firestore) throw new Error("Database unavailable");
+  const snap = await firestore.collection(JOBS).doc(jobId).get();
+  const job = snap.data();
+  const expected = Buffer.from(String(job?.accessKey || ""));
+  const given = Buffer.from(key);
+  if (!job || expected.length !== given.length || !timingSafeEqual(expected, given)) {
+    throw new Error("This results link is invalid or has expired.");
+  }
+  return { jobId, job };
+}
 
-  const jobSnap = await firestore.collection(JOBS).doc(jobId).get();
-  const job = jobSnap.data();
-  const match = job?.matches?.find((m) => m.matchId === matchId);
-  if (!match) throw new Error("This match is no longer available.");
+export async function handleGetJob(body) {
+  const { jobId, job } = await loadAuthorizedJob(body);
+  return {
+    ...(await buildJobView(jobId, job)),
+    recruiter: { companyName: job.companyName, contactName: job.contactName, email: job.email },
+  };
+}
 
-  await firestore.collection(INTRO_REQUESTS).doc(`${jobId}_${matchId}`).set(
-    {
-      jobId,
-      matchId,
-      candidatePhone: match.phone,
-      score: match.score,
-      roleTitle: job.parsed?.title || "",
-      companyName: job.companyName,
-      contactName: job.contactName,
-      email: job.email,
-      status: "requested",
-      requestedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true }
-  );
-  return { ok: true };
+/** "Reach out via Mira": stores the recruiter's note + questions and asks the candidate on WhatsApp. */
+export async function handleReachOut(body) {
+  const { jobId, job } = await loadAuthorizedJob(body);
+  const match = job.matches?.find((m) => m.matchId === clean(body.matchId, 100));
+  if (!match) throw new Error("This candidate is no longer in your results.");
+
+  const note = clean(body.note, 500);
+  const questionsText = clean(body.questions, 1500);
+  const candidate = (await getDb().collection("whatsappCandidates").doc(match.phone).get()).data() || {};
+  const questions = await parseRecruiterQuestions(questionsText, candidate);
+
+  const { intro, created } = await createIntro({ jobId, job, match, source: "recruiter", note, questions });
+  if (created || OFFERABLE.includes(intro.status)) {
+    await offerIntro({ ...intro, recruiterRequested: true, recruiterNote: note, questions });
+  }
+
+  const fresh = (await getDb().collection(INTROS).doc(intro.id).get()).data();
+  return { ok: true, intro: introView(fresh) };
 }

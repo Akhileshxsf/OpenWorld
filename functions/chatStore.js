@@ -30,10 +30,20 @@ export async function loadChat(phone) {
 
 export async function saveChat(phone, name, userText, botText) {
   const now = new Date().toISOString();
-  const newMessages = [
+  await appendMessages(phone, name, [
     { sender: "user", text: userText, timestamp: now },
     { sender: "bot", text: botText, timestamp: now },
-  ];
+  ]);
+}
+
+/** Messages Mira sends on her own (welcome, upload confirmation, alerts) so later replies see them. */
+export async function appendBotMessage(phone, text, { kind = "" } = {}) {
+  await appendMessages(phone, "", [
+    { sender: "bot", text, timestamp: new Date().toISOString(), ...(kind ? { kind } : {}) },
+  ]);
+}
+
+export async function appendMessages(phone, name, newMessages) {
   memoryChats.set(phone, [...(memoryChats.get(phone) || []), ...newMessages].slice(-MAX_STORED_MESSAGES));
 
   const firestore = getDb();
@@ -48,7 +58,7 @@ export async function saveChat(phone, name, userText, botText) {
         ref,
         {
           phone,
-          name: name || "",
+          ...(name ? { name } : {}),
           updatedAt: FieldValue.serverTimestamp(),
           messages: [...existing, ...newMessages].slice(-MAX_STORED_MESSAGES),
         },

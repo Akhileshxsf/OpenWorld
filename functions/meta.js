@@ -1,4 +1,5 @@
 import process from "node:process";
+import { resolvePhoneNumberId } from "./metaConfig.js";
 
 const GRAPH_VERSION = process.env.META_GRAPH_VERSION || "v22.0";
 
@@ -26,31 +27,45 @@ export function extractMetaInboundMessages(body) {
       }
 
       const contactName = value.contacts?.[0]?.profile?.name || "";
-      const phoneNumberId = value.metadata?.phone_number_id || process.env.META_PHONE_NUMBER_ID || "";
+      const phoneNumberId = value.metadata?.phone_number_id || "";
 
       for (const message of value.messages || []) {
         const type = message.type || "";
         let text = "";
+        let buttonId = "";
+        let media = null;
 
-        if (type === "text") {
+        if (type === "document" || type === "image") {
+          const file = message[type] || {};
+          media = {
+            kind: type,
+            id: file.id || "",
+            mimeType: file.mime_type || "",
+            fileName: file.filename || "",
+          };
+          text = file.caption || "";
+        } else if (type === "text") {
           text = message.text?.body || "";
         } else if (type === "button") {
           text = message.button?.text || message.button?.payload || "";
+          buttonId = message.button?.payload || "";
         } else if (type === "interactive") {
-          text =
-            message.interactive?.button_reply?.title ||
-            message.interactive?.list_reply?.title ||
-            "";
+          const reply = message.interactive?.button_reply || message.interactive?.list_reply;
+          text = reply?.title || "";
+          buttonId = reply?.id || "";
         }
 
         inbound.push({
           phone: String(message.from || "").replace(/\D/g, ""),
           name: contactName,
           text: text.trim(),
+          buttonId,
+          media,
           type,
           id: message.id || "",
           phoneNumberId,
-          unsupported: !text.trim(),
+          wabaId: entry.id || "",
+          unsupported: !text.trim() && !media?.id,
         });
       }
     }
@@ -59,78 +74,110 @@ export function extractMetaInboundMessages(body) {
   return { inbound, statuses };
 }
 
-export async function sendMetaReadReceipt(messageId, phoneNumberId = process.env.META_PHONE_NUMBER_ID) {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token || !phoneNumberId || !messageId) return;
-
-  try {
-    const response = await fetch(graphUrl(`${phoneNumberId}/messages`), {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        status: "read",
-        message_id: messageId,
-      }),
-      signal: AbortSignal.timeout(1500),
-    });
-    const text = await response.text();
-    console.log("meta read receipt", { status: response.status, text: text.slice(0, 240) });
-  } catch (error) {
-    console.error("meta read receipt failed", error);
-  }
-}
-
-export async function sendMetaWhatsAppText(destination, text, phoneNumberId = process.env.META_PHONE_NUMBER_ID) {
+async function postMessage(phoneNumberId, payload, { label = "send", timeoutMs } = {}) {
   const token = process.env.META_ACCESS_TOKEN;
   if (!token) throw new Error("META_ACCESS_TOKEN is missing");
-  if (!phoneNumberId) throw new Error("META_PHONE_NUMBER_ID is missing");
+  const fromId = await resolvePhoneNumberId(phoneNumberId);
+  if (!fromId) throw new Error("META_PHONE_NUMBER_ID is missing");
 
-  const response = await fetch(graphUrl(`${phoneNumberId}/messages`), {
+  const response = await fetch(graphUrl(`${fromId}/messages`), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: String(destination).replace(/\D/g, ""),
-      type: "text",
-      text: { body: text },
-    }),
+    body: JSON.stringify({ messaging_product: "whatsapp", ...payload }),
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   });
 
   const raw = await response.text();
-  let data = raw;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    // Meta sometimes returns text
-  }
-
   if (!response.ok) {
-    throw new Error(`Meta send failed: ${response.status} ${raw}`);
+    throw new Error(`Meta ${label} failed: ${response.status} ${raw}`);
+  }
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/** Media in webhooks is only an id; Graph returns a short-lived URL that also needs the token. */
+export async function downloadMetaMedia(mediaId, { maxBytes } = {}) {
+  const token = process.env.META_ACCESS_TOKEN;
+  if (!token) throw new Error("META_ACCESS_TOKEN is missing");
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const metaResponse = await fetch(graphUrl(mediaId), { headers });
+  if (!metaResponse.ok) {
+    throw new Error(`Meta media lookup failed: ${metaResponse.status} ${(await metaResponse.text()).slice(0, 300)}`);
+  }
+  const info = await metaResponse.json();
+  if (maxBytes && Number(info.file_size) > maxBytes) {
+    return { tooLarge: true, size: Number(info.file_size), mimeType: info.mime_type || "" };
   }
 
-  return data;
+  const fileResponse = await fetch(info.url, { headers });
+  if (!fileResponse.ok) throw new Error(`Meta media download failed: ${fileResponse.status}`);
+  const buffer = Buffer.from(await fileResponse.arrayBuffer());
+  if (maxBytes && buffer.length > maxBytes) {
+    return { tooLarge: true, size: buffer.length, mimeType: info.mime_type || "" };
+  }
+  return { buffer, mimeType: info.mime_type || "" };
+}
+
+function to(destination) {
+  return String(destination).replace(/\D/g, "");
+}
+
+export async function sendMetaReadReceipt(messageId, phoneNumberId) {
+  if (!process.env.META_ACCESS_TOKEN || !messageId) return;
+  try {
+    await postMessage(phoneNumberId, { status: "read", message_id: messageId }, { label: "read receipt", timeoutMs: 1500 });
+  } catch (error) {
+    console.error("meta read receipt failed", error.message);
+  }
+}
+
+export async function sendMetaWhatsAppText(destination, text, phoneNumberId) {
+  return postMessage(phoneNumberId, {
+    recipient_type: "individual",
+    to: to(destination),
+    type: "text",
+    text: { body: text },
+  });
+}
+
+/** Up to 3 quick-reply buttons; the tapped button's id comes back as message.buttonId. */
+export async function sendMetaWhatsAppButtons(destination, bodyText, buttons, phoneNumberId) {
+  return postMessage(
+    phoneNumberId,
+    {
+      recipient_type: "individual",
+      to: to(destination),
+      type: "interactive",
+      interactive: {
+        type: "button",
+        body: { text: bodyText.slice(0, 1024) },
+        action: {
+          buttons: buttons.slice(0, 3).map((b) => ({
+            type: "reply",
+            reply: { id: b.id.slice(0, 256), title: b.title.slice(0, 20) },
+          })),
+        },
+      },
+    },
+    { label: "buttons send" }
+  );
 }
 
 export async function sendMetaWhatsAppInteractiveCta({
   destination,
-  phoneNumberId = process.env.META_PHONE_NUMBER_ID,
+  phoneNumberId,
   bodyText,
   buttonLabel,
   buttonUrl,
   headerText,
 }) {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) throw new Error("META_ACCESS_TOKEN is missing");
-  if (!phoneNumberId) throw new Error("META_PHONE_NUMBER_ID is missing");
-
   const interactive = {
     type: "cta_url",
     body: { text: bodyText.slice(0, 1024) },
@@ -147,51 +194,24 @@ export async function sendMetaWhatsAppInteractiveCta({
     interactive.header = { type: "text", text: headerText.slice(0, 60) };
   }
 
-  const response = await fetch(graphUrl(`${phoneNumberId}/messages`), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      recipient_type: "individual",
-      to: String(destination).replace(/\D/g, ""),
-      type: "interactive",
-      interactive,
-    }),
-  });
-
-  const raw = await response.text();
-  let data = raw;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    // keep raw
-  }
-
-  if (!response.ok) {
-    throw new Error(`Meta interactive send failed: ${response.status} ${raw}`);
-  }
-
-  return data;
+  return postMessage(
+    phoneNumberId,
+    { recipient_type: "individual", to: to(destination), type: "interactive", interactive },
+    { label: "interactive send" }
+  );
 }
 
 /**
- * Sends an approved WhatsApp template. URL button suffix is appended to the URL defined in the template.
- * Create template in Meta Business Manager with a dynamic URL button, e.g.
- * https://openworldx.com/upload-resume?{{1}}
+ * Sends an approved WhatsApp template.
+ * buttonUrlSuffix fills a dynamic URL button (e.g. https://openworldx.com/upload-resume?{{1}}).
+ * quickReplyPayloads set the payload of each quick-reply button, in template order.
  */
 export async function sendMetaWhatsAppTemplate(
   destination,
   templateName,
-  phoneNumberId = process.env.META_PHONE_NUMBER_ID,
-  { languageCode = "en", bodyParams = [], buttonUrlSuffix = "" } = {}
+  phoneNumberId,
+  { languageCode = "en", bodyParams = [], buttonUrlSuffix = "", quickReplyPayloads = [] } = {}
 ) {
-  const token = process.env.META_ACCESS_TOKEN;
-  if (!token) throw new Error("META_ACCESS_TOKEN is missing");
-  if (!phoneNumberId) throw new Error("META_PHONE_NUMBER_ID is missing");
-
   const components = [];
   if (bodyParams.length) {
     components.push({
@@ -207,33 +227,26 @@ export async function sendMetaWhatsAppTemplate(
       parameters: [{ type: "text", text: String(buttonUrlSuffix).slice(0, 128) }],
     });
   }
+  quickReplyPayloads.forEach((payload, index) => {
+    components.push({
+      type: "button",
+      sub_type: "quick_reply",
+      index: String(index),
+      parameters: [{ type: "payload", payload: String(payload).slice(0, 256) }],
+    });
+  });
 
-  const response = await fetch(graphUrl(`${phoneNumberId}/messages`), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      messaging_product: "whatsapp",
-      to: String(destination).replace(/\D/g, ""),
+  return postMessage(
+    phoneNumberId,
+    {
+      to: to(destination),
       type: "template",
       template: {
         name: templateName,
         language: { code: languageCode },
         ...(components.length ? { components } : {}),
       },
-    }),
-  });
-
-  const raw = await response.text();
-  if (!response.ok) {
-    throw new Error(`Meta template send failed: ${response.status} ${raw}`);
-  }
-
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return raw;
-  }
+    },
+    { label: "template send" }
+  );
 }
