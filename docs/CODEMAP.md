@@ -2,6 +2,8 @@
 
 This repo holds **two products** in one deploy. Folders are split so you know what to touch for Mira/hire vs the old social app.
 
+For **end-to-end flows** and a **step-by-step reading list**, start with the root [`README.md`](../README.md).
+
 ## Frontend (`src/`)
 
 | Area | Path | Routes | What it is |
