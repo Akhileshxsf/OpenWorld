@@ -1,7 +1,7 @@
 import "dotenv/config";
 import express from "express";
-import { handleGupshupWebhook } from "./handleWebhook.js";
-import { handleMetaWebhook } from "./handleMetaWebhook.js";
+import { handleGupshupWebhook } from "./legacy/handleWebhook.js";
+import { handleMetaWebhook } from "./openworld/handleMetaWebhook.js";
 
 const app = express();
 app.use(express.json({ limit: "1mb" }));

@@ -73,7 +73,7 @@ export const whatsappWebhook = onRequest(
         type: body.type || body.eventType || "unknown",
         keys: Object.keys(body),
       });
-      const { handleGupshupWebhook } = await import("./handleWebhook.js");
+      const { handleGupshupWebhook } = await import("./legacy/handleWebhook.js");
       const result = await handleGupshupWebhook(body);
       console.log("webhook result", result);
       res.status(200).send();
@@ -126,7 +126,7 @@ export const metaWhatsappWebhook = onRequest(
         wabaId: body.entry?.[0]?.id || "",
         entries: Array.isArray(body.entry) ? body.entry.length : 0,
       });
-      const { handleMetaWebhook } = await import("./handleMetaWebhook.js");
+      const { handleMetaWebhook } = await import("./openworld/handleMetaWebhook.js");
       const result = await handleMetaWebhook(body);
       console.log("meta webhook result", result);
       res.status(200).send();
@@ -156,7 +156,7 @@ export const hireApi = onRequest(
 
     try {
       const body = parseRequestBody(req);
-      const { handleHireMatch, handleGetJob, handleReachOut } = await import("./hireMatch.js");
+      const { handleHireMatch, handleGetJob, handleReachOut } = await import("./openworld/hireMatch.js");
       const action = req.path.split("/").filter(Boolean).pop();
       const ip = String(req.get("x-forwarded-for") || req.ip || "").split(",")[0].trim();
       const result =
@@ -192,7 +192,7 @@ export const whatsappResumeUpload = onRequest(
 
     try {
       const body = parseRequestBody(req);
-      const { handleWhatsAppResumeUpload } = await import("./uploadResume.js");
+      const { handleWhatsAppResumeUpload } = await import("./openworld/uploadResume.js");
       const result = await handleWhatsAppResumeUpload(body);
       res.status(200).json(result);
     } catch (error) {
@@ -210,7 +210,7 @@ export const dailyCandidateJobs = onSchedule(
     memory: "512MiB",
   },
   async () => {
-    const { runDailyCandidateJobs } = await import("./scheduled.js");
+    const { runDailyCandidateJobs } = await import("./openworld/scheduled.js");
     const result = await runDailyCandidateJobs();
     console.log("daily candidate jobs", result);
   }

@@ -33,3 +33,6 @@ public/Mira Video updated.mp4
 functions/.env
 functions/.env.*
 !functions/.env.example
+
+# Firebase deploy cache (not source)
+.firebase/

@@ -62,7 +62,9 @@ If Firestore is down, the function keeps the last 20 messages in memory on that 
 
 ## Other files
 
-`src/` is the React + Vite website: landing page, feed, profile, and the in-app Mira chat. The landing **Chat on WhatsApp** button opens `wa.me` for `+91 98771 74681`. The site does not receive WhatsApp messages.
+`src/` is the React + Vite website. Code is split so OpenWorldX (hire + landing + resume upload) is under **`src/openworld/`**, and the older social app is under **`src/legacy/`**. See **`docs/CODEMAP.md`** for the full map.
+
+`functions/` is split the same way: **`openworld/`** (Meta WhatsApp, hire API), **`legacy/`** (Gupshup), **`shared/`** (Mira, Firestore, Groq). Deploy entry is still **`functions/index.js`**.
 
 `firebase.json` deploys the `functions/` folder as the `whatsapp` codebase and hosts the built site from `dist/`.
 

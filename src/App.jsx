@@ -1,77 +1,19 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import HomePage from "./pages/HomePage/HomePage";
-import AuthPage from "./pages/HomePage/AuthPage/AuthPage";
 import PageLayout from "./Layouts/PageLayout/PageLayout";
-import ProfilePage from "./pages/ProfilePage/ProfilePage";
-import MessageTab from "./components/Profile/MessageTab";
-import NotificationsPage from "./pages/NotificationsPage/NotificationsPage";
-import ChatbotPage from "./pages/ChatbotPage";
-import LandingPage from "./pages/LandingPage/LandingPage";
-import ResumeUploadPage from "./pages/ResumeUploadPage/ResumeUploadPage";
-import HirePage from "./pages/HirePage/HirePage";
-import DashboardPage from "./pages/HomePage/DashboardPage";
 import { useAuthState } from "react-firebase-hooks/auth";
 import { auth } from "./firebase/firebase";
+import { openWorldRoutes } from "./openworld/routes";
+import { legacyRoutes } from "./legacy/routes";
 
 function App() {
   const [authUser] = useAuthState(auth);
+  const routeProps = { authUser, Navigate };
 
   return (
     <PageLayout>
       <Routes>
-        {/* Root path */}
-        <Route
-          path="/"
-          element={!authUser ? <LandingPage /> : <Navigate to="/home" replace />}
-        />
-        
-        {/* Home page */}
-        <Route
-          path="/home"
-          element={authUser ? <HomePage /> : <Navigate to="/" replace />}
-        />
-        
-        {/* Dashboard page - accessible to all authenticated users */}
-        <Route
-          path="/dashboard"
-          element={authUser ? <DashboardPage /> : <Navigate to="/" replace />}
-        />
-        
-        {/* Auth page */}
-        <Route
-          path="/auth"
-          element={!authUser ? <AuthPage /> : <Navigate to="/home" replace />}
-        />
-
-        <Route path="/upload-resume" element={<ResumeUploadPage />} />
-        <Route path="/hire" element={<HirePage />} />
-        
-        {/* Profile page */}
-        <Route path="/:username" element={<ProfilePage />} />
-        
-        {/* Chatbot page */}
-        <Route
-          path="/chatbot"
-          element={authUser ? <ChatbotPage /> : <Navigate to="/" replace />}
-        />
-        
-        {/* Messages page - UPDATED ROUTES */}
-        <Route
-          path="/messages"
-          element={authUser ? <MessageTab /> : <Navigate to="/" replace />}
-        />
-        <Route
-          path="/messages/:chatId"
-          element={authUser ? <MessageTab /> : <Navigate to="/" replace />}
-        />
-        
-        {/* Notifications page */}
-        <Route
-          path="/notification"
-          element={authUser ? <NotificationsPage /> : <Navigate to="/" replace />}
-        />
-        
-        {/* Fallback route */}
+        {openWorldRoutes(routeProps)}
+        {legacyRoutes(routeProps)}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </PageLayout>
