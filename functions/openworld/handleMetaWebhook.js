@@ -7,7 +7,7 @@ import { profileGaps, resolveDisplayName, sanitizeDisplayName } from "../shared/
 import { updateProfileFromChat } from "./candidateProfile.js";
 import { processResumeForPhone } from "./resumeProcessor.js";
 import { rememberMetaIds } from "./metaConfig.js";
-import { getOpenIntros, handleCandidateAction } from "./intros.js";
+import { applyOfferDeliveryWebhook, getOpenIntros, handleCandidateAction } from "./intros.js";
 import { sendBotText } from "./outbound.js";
 import { handleChatResume } from "./chatResume.js";
 
@@ -28,6 +28,11 @@ export async function handleMetaWebhook(rawBody) {
         title: error.title,
         message: error.message,
       })),
+    });
+    await applyOfferDeliveryWebhook({
+      messageId: status.id,
+      status: status.status,
+      errors: status.errors,
     });
   }
 

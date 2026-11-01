@@ -134,12 +134,17 @@ export function offerMessage(intro, candidate, { reminder = false } = {}) {
     template: process.env.META_MATCH_TEMPLATE_NAME
       ? {
           name: process.env.META_MATCH_TEMPLATE_NAME,
+          languageCode: process.env.META_MATCH_TEMPLATE_LANG || process.env.META_TEMPLATE_LANG || "en",
           bodyParams: [firstName(candidate), intro.roleTitle || "a role", intro.companyName || "a company"],
           quickReplyPayloads: [`intro:yes:${intro.id}`, `intro:no:${intro.id}`],
           historyText: offerText(intro),
         }
       : null,
   };
+}
+
+function recruiterReachOut(intro) {
+  return intro.recruiterRequested || intro.source === "recruiter";
 }
 
 /** Asks the candidate yes/no. Records delivery so the recruiter sees whether the candidate was reached. */
@@ -152,18 +157,93 @@ export async function offerIntro(intro) {
     return { delivered: false, reason: "not_looking" };
   }
 
-  const delivery = await sendProactive(intro.candidatePhone, candidate, offerMessage(intro, candidate));
+  const payload = offerMessage(intro, candidate);
+  const useTemplate = "when_required";
+  const delivery = await sendProactive(intro.candidatePhone, candidate, { ...payload, useTemplate });
+  const messageId = delivery.result?.messages?.[0]?.id || null;
+
+  if (recruiterReachOut(intro)) {
+    console.log("[reach-out] whatsapp send", {
+      introId: intro.id,
+      jobId: intro.jobId,
+      matchId: intro.matchId,
+      phone: intro.candidatePhone,
+      template: process.env.META_MATCH_TEMPLATE_NAME || null,
+      useTemplate,
+      delivered: delivery.delivered,
+      via: delivery.via || null,
+      reason: delivery.reason || null,
+      messageId,
+      error: delivery.error || null,
+    });
+  }
 
   await ref.set(
     {
       status: delivery.delivered ? "awaiting_candidate" : "undeliverable",
       statusChangedAt: nowIso(),
       offeredAt: nowIso(),
-      offerDelivery: { delivered: delivery.delivered, via: delivery.via || null, reason: delivery.reason || null },
+      offerDelivery: {
+        delivered: delivery.delivered,
+        via: delivery.via || null,
+        reason: delivery.reason || null,
+        error: delivery.error || null,
+        messageId,
+      },
     },
     { merge: true }
   );
   return delivery;
+}
+
+/** Meta delivery webhooks can fail after the send API accepts the message (e.g. 130429). */
+export async function applyOfferDeliveryWebhook({ messageId, status, errors = [] }) {
+  if (!messageId || !status) return { updated: false };
+  const firestore = getDb();
+  if (!firestore) return { updated: false };
+
+  const snap = await firestore.collection(INTROS).where("offerDelivery.messageId", "==", messageId).limit(1).get();
+  if (snap.empty) return { updated: false };
+
+  const doc = snap.docs[0];
+  const intro = doc.data();
+  const err = errors[0];
+  const offerDelivery = {
+    ...(intro.offerDelivery || {}),
+    webhookStatus: status,
+    webhookAt: nowIso(),
+  };
+
+  if (status === "failed") {
+    offerDelivery.delivered = false;
+    offerDelivery.webhookError = err ? `${err.code}: ${err.message || err.title}` : "delivery_failed";
+    if (err?.code === 130429) offerDelivery.reason = "rate_limited";
+    await doc.ref.set(
+      {
+        status: "undeliverable",
+        statusChangedAt: nowIso(),
+        offerDelivery,
+      },
+      { merge: true }
+    );
+    console.log("[reach-out] webhook delivery failed", {
+      introId: doc.id,
+      messageId,
+      code: err?.code,
+      phone: intro.candidatePhone,
+    });
+    return { updated: true, introId: doc.id, status: "undeliverable" };
+  }
+
+  if (status === "delivered") {
+    offerDelivery.delivered = true;
+    offerDelivery.reason = null;
+    await doc.ref.set({ offerDelivery }, { merge: true });
+  } else {
+    await doc.ref.set({ offerDelivery }, { merge: true });
+  }
+
+  return { updated: true, introId: doc.id, status };
 }
 
 export async function getOpenIntros(phone) {

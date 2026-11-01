@@ -1,27 +1,18 @@
 import { getDb } from "../shared/firebaseAdmin.js";
-import { getCandidate, mergeCandidate } from "./candidateStore.js";
-import { INTROS, finalizeIntro, offerMessage, questionPrompt } from "./intros.js";
+import { getCandidate } from "./candidateStore.js";
+import { INTROS, finalizeIntro } from "./intros.js";
 import { emailCandidateDeclined, emailNoResponse } from "./introEmails.js";
-import { sendProactive } from "./outbound.js";
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
-const OFFER_REMINDER_AFTER = DAY;
 const OFFER_EXPIRES_AFTER = 7 * DAY;
-const QUESTIONS_REMINDER_AFTER = 20 * HOUR;
 const QUESTIONS_PARTIAL_AFTER = 2 * DAY;
 const FINALIZE_STUCK_AFTER = 10 * 60 * 1000;
 const DECLINE_EMAIL_AFTER = 3 * HOUR;
-const FOLLOW_UP_AFTER = 4 * DAY;
-const FRESHNESS_AFTER = 45 * DAY;
 
 function olderThan(iso, ms, now) {
   const time = Date.parse(iso || "");
   return Number.isFinite(time) && now - time > ms;
-}
-
-function firstName(candidate) {
-  return String(candidate?.displayName || "").trim().split(/\s+/)[0] || "there";
 }
 
 async function introsWithStatus(firestore, status) {
@@ -42,7 +33,8 @@ async function each(items, fn) {
   return done;
 }
 
-async function remindOrExpireOffers(firestore, now) {
+/** Expire stale offers and email recruiters; no scheduled WhatsApp reminders. */
+async function expireOffers(firestore, now) {
   const waiting = await introsWithStatus(firestore, "awaiting_candidate");
 
   const expired = await each(waiting, async ({ ref, intro }) => {
@@ -55,45 +47,15 @@ async function remindOrExpireOffers(firestore, now) {
     return true;
   });
 
-  const reminded = await each(waiting, async ({ ref, intro }) => {
-    if (!intro.recruiterRequested || intro.offerReminderAt) return false;
-    if (!olderThan(intro.offeredAt, OFFER_REMINDER_AFTER, now) || olderThan(intro.offeredAt, OFFER_EXPIRES_AFTER, now)) return false;
-    const candidate = await getCandidate(intro.candidatePhone, "");
-    const delivery = await sendProactive(intro.candidatePhone, candidate, offerMessage(intro, candidate, { reminder: true }));
-    await ref.set({ offerReminderAt: new Date(now).toISOString(), offerReminderDelivery: delivery.reason || "delivered" }, { merge: true });
-    return delivery.delivered;
-  });
-
-  return { expired, reminded };
+  return { expired };
 }
 
-async function nudgeOrCloseQuestions(firestore, now) {
+async function closeStaleQuestionFlows(firestore, now) {
   const collecting = await introsWithStatus(firestore, "collecting_info");
 
   const partial = await each(collecting, async ({ intro }) => {
     if (!olderThan(intro.lastCandidateActivityAt, QUESTIONS_PARTIAL_AFTER, now)) return false;
     return Boolean(await finalizeIntro(intro.id, { partial: true }));
-  });
-
-  const reminded = await each(collecting, async ({ ref, intro }) => {
-    if (intro.questionsReminderAt) return false;
-    if (!olderThan(intro.lastCandidateActivityAt, QUESTIONS_REMINDER_AFTER, now)) return false;
-    if (olderThan(intro.lastCandidateActivityAt, QUESTIONS_PARTIAL_AFTER, now)) return false;
-    const candidate = await getCandidate(intro.candidatePhone, "");
-    const company = intro.companyName || "The recruiter";
-    const delivery = await sendProactive(intro.candidatePhone, candidate, {
-      kind: "questions_reminder",
-      text: `Quick reminder 👋 ${company} is still waiting for your answers about ${intro.roleTitle || "the role"}.\n\n${questionPrompt(intro)}`,
-      template: process.env.META_QUESTIONS_REMINDER_TEMPLATE_NAME
-        ? {
-            name: process.env.META_QUESTIONS_REMINDER_TEMPLATE_NAME,
-            bodyParams: [firstName(candidate), intro.companyName || "the company", intro.roleTitle || "the role"],
-            quickReplyPayloads: [`collect:resume:${intro.id}`],
-          }
-        : null,
-    });
-    await ref.set({ questionsReminderAt: new Date(now).toISOString(), questionsReminderDelivery: delivery.reason || "delivered" }, { merge: true });
-    return delivery.delivered;
   });
 
   const stuck = await introsWithStatus(firestore, "finalizing");
@@ -102,7 +64,7 @@ async function nudgeOrCloseQuestions(firestore, now) {
     return Boolean(await finalizeIntro(intro.id, { partial: Boolean(intro.partial) }));
   });
 
-  return { partial, reminded, recovered };
+  return { partial, recovered };
 }
 
 /** Declines wait briefly for a reason button; recruiters who asked hear back either way. */
@@ -117,76 +79,12 @@ async function sendPendingDeclineEmails(firestore, now) {
   });
 }
 
-async function sendFollowUps(firestore, now) {
-  const accepted = await introsWithStatus(firestore, "accepted");
-  return each(accepted, async ({ ref, intro }) => {
-    if (intro.followUpSentAt || !olderThan(intro.acceptedAt || intro.respondedAt, FOLLOW_UP_AFTER, now)) return false;
-
-    const candidate = await getCandidate(intro.candidatePhone, "");
-    const company = intro.companyName || "the recruiter";
-    const delivery = await sendProactive(intro.candidatePhone, candidate, {
-      kind: "intro_follow_up",
-      text: `Quick check-in 👋 Has ${company} reached out about ${intro.roleTitle || "the role"} yet?`,
-      buttons: [
-        { id: `follow:yes:${intro.id}`, title: "Yes, in touch" },
-        { id: `follow:no:${intro.id}`, title: "Not yet" },
-      ],
-      template: process.env.META_FOLLOWUP_TEMPLATE_NAME
-        ? {
-            name: process.env.META_FOLLOWUP_TEMPLATE_NAME,
-            bodyParams: [firstName(candidate), company, intro.roleTitle || "the role"],
-            quickReplyPayloads: [`follow:yes:${intro.id}`, `follow:no:${intro.id}`],
-          }
-        : null,
-    });
-    await ref.set(
-      { followUpSentAt: new Date(now).toISOString(), followUpDelivery: { delivered: delivery.delivered, reason: delivery.reason || null } },
-      { merge: true }
-    );
-    return delivery.delivered;
-  });
-}
-
-async function sendFreshnessCheckIns(firestore, now) {
-  const snap = await firestore.collection("whatsappCandidates").get();
-  const candidates = snap.docs.map((doc) => ({ id: doc.id, candidate: { phone: doc.id, ...doc.data() } }));
-  return each(candidates, async ({ candidate }) => {
-    if (candidate.jobSeekingStatus === "not_looking") return false;
-    if (!olderThan(candidate.lastInboundAt, FRESHNESS_AFTER, now)) return false;
-    if (candidate.freshnessPingAt && !olderThan(candidate.freshnessPingAt, FRESHNESS_AFTER, now)) return false;
-
-    const delivery = await sendProactive(candidate.phone, candidate, {
-      kind: "freshness_check_in",
-      text: `Hi ${firstName(candidate)} 👋 Are you still looking for a new role?`,
-      buttons: [
-        { id: "fresh:yes", title: "Still looking" },
-        { id: "fresh:no", title: "Not right now" },
-      ],
-      template: process.env.META_CHECKIN_TEMPLATE_NAME
-        ? {
-            name: process.env.META_CHECKIN_TEMPLATE_NAME,
-            bodyParams: [firstName(candidate)],
-            quickReplyPayloads: ["fresh:yes", "fresh:no"],
-          }
-        : null,
-    });
-    if (delivery.reason === "not_allowlisted") return false;
-    await mergeCandidate(candidate.phone, {
-      freshnessPingAt: new Date(now).toISOString(),
-      freshnessDelivery: delivery.delivered ? "delivered" : delivery.reason,
-    });
-    return delivery.delivered;
-  });
-}
-
 export async function runDailyCandidateJobs(now = Date.now()) {
   const firestore = getDb();
   if (!firestore) throw new Error("Database unavailable");
   return {
-    offers: await remindOrExpireOffers(firestore, now),
-    questions: await nudgeOrCloseQuestions(firestore, now),
+    offers: await expireOffers(firestore, now),
+    questions: await closeStaleQuestionFlows(firestore, now),
     declineEmails: await sendPendingDeclineEmails(firestore, now),
-    followUps: await sendFollowUps(firestore, now),
-    freshness: await sendFreshnessCheckIns(firestore, now),
   };
 }

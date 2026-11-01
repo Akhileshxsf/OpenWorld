@@ -137,6 +137,26 @@ export const metaWhatsappWebhook = onRequest(
   }
 );
 
+function resolveHireAction(req, body) {
+  const fromBody = cleanAction(body?.action);
+  if (fromBody) return fromBody;
+
+  const path = String(req.path || req.url || "").split("?")[0];
+  const parts = path.split("/").filter(Boolean);
+  const last = parts[parts.length - 1];
+  if (last && last !== "hire" && last !== "api") return last;
+
+  const hireIdx = parts.indexOf("hire");
+  if (hireIdx >= 0 && parts[hireIdx + 1]) return parts[hireIdx + 1];
+
+  return "match";
+}
+
+function cleanAction(value) {
+  const action = String(value || "").trim().toLowerCase();
+  return ["match", "job", "reach-out", "intro"].includes(action) ? action : "";
+}
+
 export const hireApi = onRequest(
   {
     cors: true,
@@ -154,10 +174,11 @@ export const hireApi = onRequest(
       return;
     }
 
+    let action = "match";
     try {
       const body = parseRequestBody(req);
       const { handleHireMatch, handleGetJob, handleReachOut } = await import("./openworld/hireMatch.js");
-      const action = req.path.split("/").filter(Boolean).pop();
+      action = resolveHireAction(req, body);
       const ip = String(req.get("x-forwarded-for") || req.ip || "").split(",")[0].trim();
       const result =
         action === "job"
@@ -165,9 +186,17 @@ export const hireApi = onRequest(
           : action === "reach-out" || action === "intro"
             ? await handleReachOut(body)
             : await handleHireMatch(body, { ip, userAgent: req.get("user-agent") || "" });
+      if (action === "reach-out" || action === "intro") {
+        console.log("[reach-out] hireApi ok", {
+          jobId: body.jobId,
+          matchId: body.matchId,
+          introStatus: result?.intro?.status,
+          delivery: result?.intro?.delivery,
+        });
+      }
       res.status(200).json(result);
     } catch (error) {
-      console.error("hireApi failed", req.path, error);
+      console.error("hireApi failed", req.path || req.url, action, error);
       res.status(400).json({ error: error.message || "Something went wrong" });
     }
   }

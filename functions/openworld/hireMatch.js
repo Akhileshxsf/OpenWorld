@@ -341,7 +341,12 @@ function introView(intro) {
   }));
   return {
     status: intro.status,
-    delivery: intro.offerDelivery?.reason || null,
+    delivery:
+      intro.offerDelivery?.webhookError ||
+      (intro.offerDelivery?.reason === "rate_limited"
+        ? "WhatsApp limit (130429) — try again later"
+        : intro.offerDelivery?.reason) ||
+      (intro.offerDelivery?.error ? `send_failed: ${intro.offerDelivery.error}` : null),
     note: intro.recruiterNote || "",
     questions,
     candidateQuestions: intro.candidateQuestions || [],
@@ -411,6 +416,11 @@ export async function handleGetJob(body) {
 
 /** "Reach out via Mira": stores the recruiter's note + questions and asks the candidate on WhatsApp. */
 export async function handleReachOut(body) {
+  if (!process.env.META_MATCH_TEMPLATE_NAME) {
+    throw new Error(
+      "Recruiter reach-out requires META_MATCH_TEMPLATE_NAME (your approved WhatsApp template, e.g. openworldx_recruiter_interest)."
+    );
+  }
   const { jobId, job } = await loadAuthorizedJob(body);
   const match = job.matches?.find((m) => m.matchId === clean(body.matchId, 100));
   if (!match) throw new Error("This candidate is no longer in your results.");
@@ -418,13 +428,37 @@ export async function handleReachOut(body) {
   const note = clean(body.note, 500);
   const questionsText = clean(body.questions, 1500);
   const candidate = (await getDb().collection("whatsappCandidates").doc(match.phone).get()).data() || {};
-  const questions = await parseRecruiterQuestions(questionsText, candidate);
+  let questions = [];
+  if (questionsText) {
+    try {
+      questions = await parseRecruiterQuestions(questionsText, candidate);
+    } catch (error) {
+      console.error("parseRecruiterQuestions failed, using single question", error.message);
+      questions = [{ text: questionsText.slice(0, 200), prefill: "", status: "pending", answer: "" }];
+    }
+  }
+
+  console.log("[reach-out] requested", {
+    jobId,
+    matchId: match.matchId,
+    phone: match.phone,
+    questionCount: questions.length,
+    company: job.companyName || "",
+    role: job.parsed?.title || "",
+  });
 
   const { intro, created } = await createIntro({ jobId, job, match, source: "recruiter", note, questions });
   if (created || OFFERABLE.includes(intro.status)) {
     await offerIntro({ ...intro, recruiterRequested: true, recruiterNote: note, questions });
+  } else {
+    console.log("[reach-out] skipped offer", { introId: intro.id, status: intro.status });
   }
 
   const fresh = (await getDb().collection(INTROS).doc(intro.id).get()).data();
+  console.log("[reach-out] done", {
+    introId: intro.id,
+    status: fresh?.status,
+    delivery: fresh?.offerDelivery || null,
+  });
   return { ok: true, intro: introView(fresh) };
 }
