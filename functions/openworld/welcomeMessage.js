@@ -1,5 +1,6 @@
-import { sendMetaWhatsAppTemplate, sendMetaWhatsAppText } from "./meta.js";
+import { sendMetaWhatsAppText } from "./meta.js";
 import { signUploadToken } from "./uploadToken.js";
+import { inServiceWindow, sendBotText, sendProactive } from "./outbound.js";
 
 function uploadQuery(phone) {
   const normalized = String(phone || "").replace(/\D/g, "");
@@ -16,13 +17,16 @@ export function buildResumeUploadUrl(phone) {
   return url.toString();
 }
 
-export function welcomeBodyText(name) {
+export function welcomeBodyText(name, phone) {
   const hi = name ? `Hi ${name.split(" ")[0]}! ` : "Hi! ";
+  const uploadLine = phone
+    ? `\n\nUpload your resume (PDF) here if you prefer the website:\n${buildResumeUploadUrl(phone)}`
+    : "";
   return (
     `${hi}I'm Mira on OpenWorldX — I help you find jobs that fit you.\n\n` +
     `Step 1: Send me your resume as a PDF right here in this chat 📄\n` +
     `Step 2: Chat with me so I understand your skills, goals, and what roles you want.\n\n` +
-    `Then I'll suggest jobs that actually fit you.`
+    `Then I'll suggest jobs that actually fit you.${uploadLine}`
   );
 }
 
@@ -41,46 +45,59 @@ function templateHistoryText(templateName, name) {
   return `[Welcome message: introduced Mira and asked them to send their resume PDF in this chat]`;
 }
 
-async function sendWelcomeTemplate(phone, templateName, name, phoneNumberId) {
-  const options = {
+function welcomeTemplate(name, phone) {
+  const templateName = process.env.META_RESUME_TEMPLATE_NAME;
+  if (!templateName) return null;
+  return {
+    name: templateName,
     languageCode: process.env.META_RESUME_TEMPLATE_LANG || "en",
     bodyParams: [name?.split(" ")[0] || "there"],
+    buttonUrlSuffix: `?${uploadQuery(phone)}`,
+    historyText: templateHistoryText(templateName, name),
   };
-  try {
-    // The template's button URL is https://openworldx.com/upload-resume{{1}}, so the suffix carries the "?".
-    return await sendMetaWhatsAppTemplate(phone, templateName, phoneNumberId, {
-      ...options,
-      buttonUrlSuffix: `?${uploadQuery(phone)}`,
-    });
-  } catch (error) {
-    // Templates without a dynamic URL button reject the button parameter.
-    if (!/button|parameter/i.test(error.message)) throw error;
-    return sendMetaWhatsAppTemplate(phone, templateName, phoneNumberId, options);
-  }
 }
 
 /**
- * Sends the approved welcome template (META_RESUME_TEMPLATE_NAME), plus a "send the PDF here" hint
- * while that template still points at the upload button. Falls back to plain text. Returns the text to store.
+ * Welcome after a user's first message: session text inside the 24h window (same as reach-out when_required),
+ * approved template only when the window is closed. Template sends use shared backoff retries.
  */
-export async function sendMetaResumeWelcome(phone, name, phoneNumberId) {
-  const templateName = process.env.META_RESUME_TEMPLATE_NAME;
+export async function sendMetaResumeWelcome(phone, name, phoneNumberId, candidate = {}) {
+  const template = welcomeTemplate(name, phone);
+  const text = welcomeBodyText(name, phone);
+  const inWindow = inServiceWindow(candidate);
 
-  if (templateName) {
-    try {
-      await sendWelcomeTemplate(phone, templateName, name, phoneNumberId);
-      let history = templateHistoryText(templateName, name);
-      if (process.env.META_WELCOME_CHAT_HINT === "true") {
-        await sendMetaWhatsAppText(phone, CHAT_HINT, phoneNumberId);
-        history += `\n${CHAT_HINT}`;
-      }
-      return history;
-    } catch (error) {
-      console.warn("Meta template welcome failed, falling back to text:", error.message);
+  const delivery = await sendProactive(phone, candidate, {
+    kind: "welcome",
+    text,
+    template,
+    useTemplate: "when_required",
+    phoneNumberId,
+  });
+
+  console.log("[welcome] whatsapp send", {
+    phone,
+    inServiceWindow: inWindow,
+    delivered: delivery.delivered,
+    via: delivery.via || null,
+    reason: delivery.reason || null,
+    messageId: delivery.result?.messages?.[0]?.id || null,
+  });
+
+  if (delivery.delivered) {
+    let history = template && delivery.via === "template" ? template.historyText : text;
+    if (process.env.META_WELCOME_CHAT_HINT === "true" && delivery.via === "template") {
+      await sendBotText(phone, CHAT_HINT, { phoneNumberId, kind: "welcome_hint" });
+      history += `\n${CHAT_HINT}`;
     }
+    return history;
   }
 
-  const text = welcomeBodyText(name);
-  await sendMetaWhatsAppText(phone, text, phoneNumberId);
-  return text;
+  console.warn("[welcome] sendProactive failed, plain text fallback", delivery.reason || delivery.error);
+  try {
+    await sendMetaWhatsAppText(phone, text, phoneNumberId);
+    return text;
+  } catch (error) {
+    console.error("[welcome] text fallback failed", error.message);
+    throw error;
+  }
 }

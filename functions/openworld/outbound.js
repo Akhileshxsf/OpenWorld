@@ -59,15 +59,21 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function deliverApprovedTemplate(phone, template, { kind, historyText }) {
+export async function deliverApprovedTemplate(phone, template, { kind, historyText, phoneNumberId } = {}) {
   const languageCode =
     template.languageCode || process.env.META_MATCH_TEMPLATE_LANG || process.env.META_TEMPLATE_LANG || "en";
   const bodyParams = template.bodyParams || [];
   const quickReplyPayloads = template.quickReplyPayloads || [];
-  const payloads = [
-    { languageCode, bodyParams, quickReplyPayloads },
-    { languageCode, bodyParams, quickReplyPayloads: [] },
-  ];
+  const buttonUrlSuffix = template.buttonUrlSuffix || "";
+  const payloads = buttonUrlSuffix
+    ? [
+        { languageCode, bodyParams, quickReplyPayloads, buttonUrlSuffix },
+        { languageCode, bodyParams, quickReplyPayloads: [] },
+      ]
+    : [
+        { languageCode, bodyParams, quickReplyPayloads },
+        { languageCode, bodyParams, quickReplyPayloads: [] },
+      ];
 
   let lastError;
   for (let attempt = 0; attempt < payloads.length; attempt += 1) {
@@ -76,7 +82,7 @@ async function deliverApprovedTemplate(phone, template, { kind, historyText }) {
     let rateTry = 0;
     while (true) {
       try {
-        const result = await sendMetaWhatsAppTemplate(phone, template.name, undefined, opts);
+        const result = await sendMetaWhatsAppTemplate(phone, template.name, phoneNumberId, opts);
         await appendBotMessage(normalize(phone), historyText || template.historyText || "", { kind });
         return { delivered: true, via: "template", result };
       } catch (error) {
@@ -105,8 +111,14 @@ async function deliverApprovedTemplate(phone, template, { kind, historyText }) {
  * Message Mira starts herself.
  * useTemplate: "always" → approved template (recruiter reach-out); "when_required" → session in 24h, else template.
  */
-export async function sendProactive(phone, candidate, { text, buttons, template, kind, useTemplate = "when_required" }) {
+export async function sendProactive(
+  phone,
+  candidate,
+  { text, buttons, template, kind, useTemplate = "when_required", phoneNumberId } = {}
+) {
   if (!isAllowedRecipient(phone)) return { delivered: false, reason: "not_allowlisted" };
+
+  const sendOpts = { phoneNumberId, kind };
 
   try {
     const mustUseTemplate = useTemplate === "always";
@@ -114,18 +126,26 @@ export async function sendProactive(phone, candidate, { text, buttons, template,
       if (!template?.name) {
         return { delivered: false, reason: "missing_match_template" };
       }
-      return await deliverApprovedTemplate(phone, template, { kind, historyText: template.historyText || text });
+      return await deliverApprovedTemplate(phone, template, {
+        kind,
+        historyText: template.historyText || text,
+        phoneNumberId,
+      });
     }
 
     if (inServiceWindow(candidate)) {
       const result = buttons?.length
-        ? await sendBotButtons(phone, text, buttons, { kind })
-        : await sendBotText(phone, text, { kind });
+        ? await sendBotButtons(phone, text, buttons, sendOpts)
+        : await sendBotText(phone, text, sendOpts);
       return { delivered: true, via: "session", result };
     }
 
     if (template?.name) {
-      return await deliverApprovedTemplate(phone, template, { kind, historyText: template.historyText || text });
+      return await deliverApprovedTemplate(phone, template, {
+        kind,
+        historyText: template.historyText || text,
+        phoneNumberId,
+      });
     }
 
     return { delivered: false, reason: "outside_24h_no_template" };

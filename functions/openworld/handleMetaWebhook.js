@@ -79,11 +79,12 @@ export async function handleMetaWebhook(rawBody) {
       existing: candidate.displayName,
       fromWhatsApp: whatsAppName,
     });
+    const lastInboundAt = new Date().toISOString();
     await mergeCandidate(phone, {
-      lastInboundAt: new Date().toISOString(),
+      lastInboundAt,
       ...(displayNamePatch && !sanitizeDisplayName(candidate.displayName) ? { displayName: displayNamePatch } : {}),
     });
-    candidate.lastInboundAt = new Date().toISOString();
+    candidate.lastInboundAt = lastInboundAt;
     if (displayNamePatch && !sanitizeDisplayName(candidate.displayName)) candidate.displayName = displayNamePatch;
 
     if (message.unsupported) {
@@ -126,7 +127,7 @@ export async function handleMetaWebhook(rawBody) {
 
     if (history.length === 0 && !hasResumeOnFile(resume)) {
       await readReceipt;
-      const welcome = await sendMetaResumeWelcome(phone, candidate.displayName, message.phoneNumberId);
+      const welcome = await sendMetaResumeWelcome(phone, candidate.displayName, message.phoneNumberId, candidate);
       const now = new Date().toISOString();
       await appendMessages(phone, message.name, [
         { sender: "user", text: message.text, timestamp: now },
