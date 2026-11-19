@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { getBucket } from "../shared/firebaseAdmin.js";
 import { extractProfileFromResume } from "./candidateProfile.js";
-import { claimResumeProcessing, getCandidate, mergeCandidate, patchResume } from "./candidateStore.js";
+import { claimResumeProcessing, getCandidate, getResume, mergeCandidate, patchResume } from "./candidateStore.js";
 import { profileGaps, resolveDisplayName } from "../shared/candidateSchema.js";
 import { sendBotText } from "./outbound.js";
 
@@ -27,25 +27,56 @@ function list(values, max) {
   return (Array.isArray(values) ? values : []).filter(Boolean).slice(0, max).join(", ");
 }
 
-/** Short "here's what I read" message so the candidate can correct the profile before matching. */
-export function buildResumeConfirmation(candidate, { updated = false } = {}) {
-  const education = [candidate.degree, candidate.college].filter(Boolean).join(", ");
-  const lines = [
-    education && `🎓 ${education}${candidate.graduationYear ? ` (${candidate.graduationYear})` : ""}`,
-    list(candidate.companies, 3) && `💼 ${list(candidate.companies, 3)}`,
-    list(candidate.skills, 6) && `🛠 ${list(candidate.skills, 6)}`,
-    list(candidate.roles, 3) && `🎯 Good fit for: ${list(candidate.roles, 3)}`,
-  ].filter(Boolean);
+function conciseSummary(profileText, max = 120) {
+  const t = String(profileText || "").trim().replace(/\s+/g, " ");
+  if (!t) return "";
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const period = cut.lastIndexOf(". ");
+  if (period >= 40) return cut.slice(0, period + 1);
+  return `${cut.trimEnd()}…`;
+}
 
-  const opener = updated
-    ? "Updated your profile with the new resume ✅"
-    : "Got your resume ✅";
-  const summary = lines.length ? `${opener} Here's what I picked up:\n\n${lines.join("\n")}` : opener;
-  const nextGap = profileGaps(candidate)[0];
-  const next = nextGap
-    ? `Anything wrong or missing? Just tell me. Otherwise — ${nextGap.question.charAt(0).toLowerCase()}${nextGap.question.slice(1)}`
-    : "Anything wrong or missing? Just tell me.";
-  return `${summary}\n\n${next}`;
+/** 2–3 lines only; full profileText stays in Firestore for recruiters. */
+function profilePreviewBody(candidate) {
+  const first = String(candidate.displayName || "")
+    .trim()
+    .split(/\s+/)[0];
+  const edu = [candidate.college, candidate.degree].filter(Boolean).join(" · ");
+  const parts = [];
+  if (first) parts.push(`👤 ${first}`);
+  if (edu) {
+    const year = candidate.graduationYear ? ` '${String(candidate.graduationYear).slice(-2)}` : "";
+    parts.push(`🎓 ${edu}${year}`);
+  }
+  const skills = list(candidate.skills, 4);
+  if (skills) parts.push(`🛠 ${skills}`);
+  if (!parts.length) return conciseSummary(candidate.profileText) || "Resume saved.";
+  return parts.slice(0, 3).join("\n");
+}
+
+function profileCompletionMessage(candidate) {
+  const gaps = profileGaps(candidate);
+  if (!gaps.length) {
+    return "✅ Your profile is ready for recruiter matching. Reply here if anything looks wrong.";
+  }
+  const need = gaps
+    .slice(0, 4)
+    .map((g) => g.label)
+    .join(", ");
+  const extra = gaps.length > 4 ? ` (+${gaps.length - 4} more)` : "";
+  return (
+    `A few more details will complete your profile: ${need}${extra}.\n\n` +
+    `First up — ${gaps[0].question}`
+  );
+}
+
+/** Sent after parsing; candidate can correct before matching. */
+export function buildResumeConfirmation(candidate, { updated = false } = {}) {
+  const headline = updated ? "Updated snapshot:" : "Quick snapshot:";
+  const body = profilePreviewBody(candidate);
+  const footer = profileCompletionMessage(candidate);
+  return `${headline}\n\n${body}\n\n${footer}`;
 }
 
 export async function processResumeForPhone(phone, { notifyWhatsApp = true, phoneNumberId, force = false } = {}) {

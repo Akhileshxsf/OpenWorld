@@ -1,146 +1,62 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { createRequire } from "node:module";
 import { FieldValue } from "firebase-admin/firestore";
 import { getDb } from "../shared/firebaseAdmin.js";
 import { groqJsonPrompt } from "../shared/groqJson.js";
+import {
+  anonymize,
+  buildLlmShortlist,
+  buildMatchRetrievePool,
+} from "./candidatePool.js";
+import {
+  applyConfirmedParsed,
+  assertJdReadyForMatch,
+  parseJobDescription,
+  parsedForClient,
+  readJobDescription,
+} from "./jobDescription.js";
 import { INTROS, OFFERABLE, createIntro, getOpenIntros, introId, offerIntro } from "./intros.js";
 import { parseRecruiterQuestions } from "./introQuestions.js";
-
-const require = createRequire(import.meta.url);
-// The package root runs a debug self-test when it has no module.parent (true under createRequire).
-const pdfParse = require("pdf-parse/lib/pdf-parse.js");
 
 const JOBS = "hiringJobs";
 const AUTO_OFFER_MIN_SCORE = 75;
 const AUTO_OFFERS_PER_JOB = 3;
-const MAX_JD_BYTES = 8 * 1024 * 1024;
-const MAX_JD_CHARS = 12000;
-const SHORTLIST_SIZE = 15;
-const MAX_RESULTS = 10;
+const LLM_RANK_BATCH = 10;
+/** Firestore job doc safety cap (set HIRE_MAX_MATCH_RESULTS to override). */
+const DEFAULT_MAX_MATCHES = 2000;
+export const DEFAULT_MATCH_PAGE_SIZE = 5;
+const MAX_MATCH_PAGE_SIZE = 50;
+
+function parseMatchPage(body) {
+  const pageSize = Math.min(
+    MAX_MATCH_PAGE_SIZE,
+    Math.max(5, Number(body.pageSize) || DEFAULT_MATCH_PAGE_SIZE)
+  );
+  const page = Math.max(0, Number(body.page) || 0);
+  return { page, pageSize };
+}
+
+function prescoreRankFallback(shortlist) {
+  return shortlist.map((item) => ({
+    ...item,
+    score: item.coverage,
+    headline: clean(
+      [
+        item.candidate?.degree,
+        (item.matchedSkills || []).slice(0, 3).join(" · ") || "Profile from OpenWorldX",
+      ]
+        .filter(Boolean)
+        .join(" — "),
+      120
+    ),
+    reasons: (item.matchedSkills || []).length
+      ? [`Matching skills: ${item.matchedSkills.slice(0, 4).join(", ")}`]
+      : ["Keyword overlap with your job requirements"],
+    gaps: [],
+  }));
+}
 
 function clean(value, max = 200) {
   return String(value || "").trim().slice(0, max);
-}
-
-async function readJobDescription({ jdText, fileBase64, fileName }) {
-  if (fileBase64) {
-    const buffer = Buffer.from(String(fileBase64), "base64");
-    if (!buffer.length) throw new Error("The uploaded file is empty.");
-    if (buffer.length > MAX_JD_BYTES) throw new Error("File too large (max 8 MB).");
-    const isPdf = buffer.slice(0, 4).toString() === "%PDF" || /\.pdf$/i.test(fileName || "");
-    const text = isPdf ? (await pdfParse(buffer)).text : buffer.toString("utf8");
-    return text.replace(/\s+\n/g, "\n").trim();
-  }
-  return String(jdText || "").trim();
-}
-
-async function parseJobDescription(text) {
-  const prompt = `
-Extract the hiring requirements from this job description. Use only what the text says.
-Return one JSON object with keys:
-- title (string)
-- company (string, "" if absent)
-- location (string, "" if absent)
-- remoteOk (boolean or null)
-- experienceMin (number or null, years)
-- experienceMax (number or null, years)
-- mustHaveSkills (string array, core required skills/tools, max 12)
-- niceToHaveSkills (string array, max 10)
-- roleKeywords (string array, job-title words and synonyms, e.g. "backend", "sde", "ml engineer", max 8)
-- summary (string, 1-2 sentence plain summary of the role)
-
-Job description:
-"""
-${text.slice(0, MAX_JD_CHARS)}
-"""
-
-Output valid JSON only:`.trim();
-
-  const parsed = await groqJsonPrompt(prompt, { temperature: 0 });
-  const list = (v, n) => (Array.isArray(v) ? v.map((s) => clean(s, 60)).filter(Boolean).slice(0, n) : []);
-  return {
-    title: clean(parsed.title, 120) || "Untitled role",
-    company: clean(parsed.company, 120),
-    location: clean(parsed.location, 120),
-    remoteOk: typeof parsed.remoteOk === "boolean" ? parsed.remoteOk : null,
-    experienceMin: Number.isFinite(parsed.experienceMin) ? parsed.experienceMin : null,
-    experienceMax: Number.isFinite(parsed.experienceMax) ? parsed.experienceMax : null,
-    mustHaveSkills: list(parsed.mustHaveSkills, 12),
-    niceToHaveSkills: list(parsed.niceToHaveSkills, 10),
-    roleKeywords: list(parsed.roleKeywords, 8),
-    summary: clean(parsed.summary, 400),
-  };
-}
-
-function norm(value) {
-  return String(value || "").toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
-}
-
-function candidateHaystack(c) {
-  return norm(
-    [
-      ...(c.skills || []),
-      ...(c.roles || []),
-      ...(c.projects || []),
-      ...(c.certifications || []),
-      c.degree,
-      c.education,
-      c.careerGoals,
-      c.profileText,
-    ].join(" ")
-  );
-}
-
-function hasTerm(haystack, term) {
-  const t = norm(term);
-  if (!t) return false;
-  return ` ${haystack} `.includes(` ${t} `) || (t.length > 4 && haystack.includes(t));
-}
-
-/** Cheap keyword pre-score so only a shortlist goes to the model. */
-function preScore(candidate, jd) {
-  const haystack = candidateHaystack(candidate);
-  const matchedMust = jd.mustHaveSkills.filter((s) => hasTerm(haystack, s));
-  const matchedNice = jd.niceToHaveSkills.filter((s) => hasTerm(haystack, s));
-  const roleHits = jd.roleKeywords.filter((k) => hasTerm(haystack, k)).length;
-
-  const years = Number(candidate.experienceYears);
-  const experienceFit =
-    !Number.isFinite(years) || jd.experienceMin == null
-      ? 0.5
-      : years >= jd.experienceMin && (jd.experienceMax == null || years <= jd.experienceMax + 1)
-        ? 1
-        : 0;
-  const where = norm(`${candidate.location} ${candidate.locationPreference}`);
-  const locationFit =
-    !jd.location || jd.remoteOk || /remote/.test(where)
-      ? 1
-      : norm(jd.location).split(" ").some((w) => w.length > 2 && where.includes(w))
-        ? 1
-        : 0;
-
-  const share = (hit, total) => (total ? hit / total : 0.5);
-  const coverage = Math.round(
-    share(matchedMust.length, jd.mustHaveSkills.length) * 70 +
-      share(matchedNice.length, jd.niceToHaveSkills.length) * 15 +
-      experienceFit * 10 +
-      locationFit * 5
-  );
-
-  const score = matchedMust.length * 3 + matchedNice.length + roleHits * 2 + experienceFit * 2 + locationFit;
-  return { score, coverage, matchedSkills: [...matchedMust, ...matchedNice] };
-}
-
-function anonymize(candidate) {
-  return {
-    college: clean(candidate.college, 120),
-    degree: clean(candidate.degree, 120),
-    graduationYear: Number.isFinite(candidate.graduationYear) ? candidate.graduationYear : null,
-    experienceYears: Number.isFinite(candidate.experienceYears) ? candidate.experienceYears : null,
-    roles: (candidate.roles || []).slice(0, 4),
-    skills: (candidate.skills || []).slice(0, 14),
-    location: clean(candidate.locationPreference || candidate.location, 120),
-  };
 }
 
 async function rankShortlist(jd, shortlist) {
@@ -148,7 +64,7 @@ async function rankShortlist(jd, shortlist) {
     ref,
     ...anonymize(candidate),
     companies: (candidate.companies || []).slice(0, 4),
-    summary: clean(candidate.profileText, 1200),
+    summary: clean(candidate.profileText, 400),
   }));
 
   const prompt = `
@@ -166,23 +82,48 @@ For EACH candidate return:
 - reasons (2-3 short strings: concrete evidence why they fit; no names or company names)
 - gaps (0-2 short strings: missing requirements)
 
-Output JSON only: {"matches": [ ... ]}`.trim();
+Keep every reason/gap under 80 characters. Output JSON only: {"matches": [ ... ]} with at most ${profiles.length} entries.`.trim();
 
-  const parsed = await groqJsonPrompt(prompt, { temperature: 0 });
-  const byRef = new Map((parsed.matches || []).map((m) => [String(m.ref), m]));
-  return shortlist.map((item) => {
-    const m = byRef.get(item.ref) || {};
-    const modelScore = Math.max(0, Math.min(100, Number(m.score) || 0));
-    // The model's score drifts between identical runs; anchoring half on skill coverage keeps results stable.
-    const score = Math.round(modelScore * 0.5 + item.coverage * 0.5);
-    return {
-      ...item,
-      score,
-      headline: clean(m.headline, 120),
-      reasons: (Array.isArray(m.reasons) ? m.reasons : []).map((r) => clean(r, 200)).filter(Boolean).slice(0, 3),
-      gaps: (Array.isArray(m.gaps) ? m.gaps : []).map((g) => clean(g, 200)).filter(Boolean).slice(0, 2),
-    };
-  });
+  try {
+    const parsed = await groqJsonPrompt(prompt, { temperature: 0 });
+    const byRef = new Map((parsed.matches || []).map((m) => [String(m.ref), m]));
+    return shortlist.map((item) => {
+      const m = byRef.get(item.ref) || {};
+      const modelScore = Math.max(0, Math.min(100, Number(m.score) || 0));
+      const score = Math.round(modelScore * 0.5 + item.coverage * 0.5);
+      return {
+        ...item,
+        score,
+        headline: clean(m.headline, 120),
+        reasons: (Array.isArray(m.reasons) ? m.reasons : []).map((r) => clean(r, 200)).filter(Boolean).slice(0, 3),
+        gaps: (Array.isArray(m.gaps) ? m.gaps : []).map((g) => clean(g, 200)).filter(Boolean).slice(0, 2),
+      };
+    });
+  } catch (error) {
+    console.warn("rankShortlist LLM failed, prescore fallback", error.message);
+    return prescoreRankFallback(shortlist);
+  }
+}
+
+async function rankShortlistBatched(jd, shortlist) {
+  const merged = [];
+  for (let i = 0; i < shortlist.length; i += LLM_RANK_BATCH) {
+    const batch = shortlist.slice(i, i + LLM_RANK_BATCH);
+    const ranked = await rankShortlist(jd, batch);
+    merged.push(...ranked);
+  }
+  return merged;
+}
+
+/** Everyone in retrievePool gets a row; LLM enriches the shortlist, prescore covers the rest. */
+function mergeRetrievePoolWithRank(llmRanked, retrievePool) {
+  const byPhone = new Map(llmRanked.map((m) => [m.phone, m]));
+  return retrievePool
+    .map((item) => {
+      if (byPhone.has(item.phone)) return byPhone.get(item.phone);
+      return prescoreRankFallback([item])[0];
+    })
+    .sort((a, b) => b.score - a.score);
 }
 
 const SEARCH_LIMITS = { email: 20, ip: 40 };
@@ -229,28 +170,28 @@ export async function handleHireMatch(body, meta = {}) {
   const requester = { ip: clean(meta.ip, 64), userAgent: clean(meta.userAgent, 200) };
   await enforceSearchLimit(firestore, { email: contact.email, ip: requester.ip });
 
-  const [jd, snap] = await Promise.all([
-    parseJobDescription(jdText),
-    firestore.collection("whatsappCandidates").get(),
-  ]);
+  const confirmed = applyConfirmedParsed(body, contact.companyName);
+  const jd = confirmed || (await parseJobDescription(jdText, { companyName: contact.companyName }));
+  assertJdReadyForMatch(jd);
 
-  const pool = snap.docs
-    .map((doc) => ({ phone: doc.id, candidate: doc.data() }))
-    .filter(({ candidate }) => candidate.profileText || (candidate.skills || []).length)
-    .filter(({ candidate }) => candidate.jobSeekingStatus !== "not_looking");
+  const { eligibleCount, retrievePool, mustGuarantee } = await buildMatchRetrievePool(firestore, jd);
+  const shortlist = buildLlmShortlist(retrievePool, mustGuarantee, jd);
 
-  const shortlist = pool
-    .map(({ phone, candidate }) => ({ phone, candidate, ...preScore(candidate, jd) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, SHORTLIST_SIZE)
-    .map((item, i) => ({ ...item, ref: `C${i + 1}` }));
-
-  const ranked = shortlist.length ? await rankShortlist(jd, shortlist) : [];
-  const top = ranked
-    .filter((m) => m.score >= 30)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, MAX_RESULTS)
-    .map((m) => ({ ...m, matchId: randomUUID() }));
+  let llmRanked = [];
+  if (shortlist.length) {
+    try {
+      llmRanked = await rankShortlistBatched(jd, shortlist);
+    } catch (error) {
+      console.warn("rankShortlistBatched failed, prescore fallback", error.message);
+      llmRanked = prescoreRankFallback(shortlist);
+    }
+  }
+  const merged = mergeRetrievePoolWithRank(llmRanked, retrievePool);
+  const maxMatches = Math.max(50, Number(process.env.HIRE_MAX_MATCH_RESULTS) || DEFAULT_MAX_MATCHES);
+  if (merged.length > maxMatches) {
+    console.warn("hire match truncated", { eligibleCount, merged: merged.length, maxMatches });
+  }
+  const top = merged.slice(0, maxMatches).map((m) => ({ ...m, matchId: randomUUID() }));
 
   const jobRef = firestore.collection(JOBS).doc();
   const accessKey = randomBytes(18).toString("base64url");
@@ -261,7 +202,8 @@ export async function handleHireMatch(body, meta = {}) {
     jdText: jdText.slice(0, 50000),
     jdFileName: clean(body.fileName, 200),
     parsed: jd,
-    poolSize: pool.length,
+    parsedConfirmed: Boolean(confirmed),
+    poolSize: eligibleCount,
     matches: top.map((m) => ({
       matchId: m.matchId,
       phone: m.phone,
@@ -280,7 +222,15 @@ export async function handleHireMatch(body, meta = {}) {
     if (autoOffers.length) await jobRef.set({ autoOffers }, { merge: true });
   }
 
-  return { ...(await buildJobView(jobRef.id, job)), accessKey };
+  return { ...(await buildJobView(jobRef.id, job, { page: 0, pageSize: DEFAULT_MATCH_PAGE_SIZE })), accessKey };
+}
+
+/** Parse JD only; recruiter can confirm skills on hire page before match. */
+export async function handleParseJob(body) {
+  const companyName = clean(body.companyName, 120);
+  const jdText = await readJobDescription(body);
+  const parsed = await parseJobDescription(jdText, { companyName });
+  return { parsed: parsedForClient(parsed), jdTextChars: jdText.length };
 }
 
 /** Strong matches hear about a new role right away; one pending offer per candidate at a time. */
@@ -355,22 +305,51 @@ function introView(intro) {
   };
 }
 
-/** Results as the recruiter sees them: current profile + contact + intro status for each match. */
-export async function buildJobView(jobId, job) {
+async function getAllChunked(firestore, docRefs, chunkSize = 100) {
+  if (!docRefs.length) return [];
+  const snaps = [];
+  for (let i = 0; i < docRefs.length; i += chunkSize) {
+    const batch = docRefs.slice(i, i + chunkSize);
+    snaps.push(...(await firestore.getAll(...batch)));
+  }
+  return snaps;
+}
+
+/** Results as the recruiter sees them: paginated profiles + contact + intro status. */
+export async function buildJobView(jobId, job, { page = 0, pageSize = DEFAULT_MATCH_PAGE_SIZE } = {}) {
   const firestore = getDb();
-  const matches = job.matches || [];
-  const phones = matches.map((m) => m.phone);
+  const sorted = [...(job.matches || [])].sort((a, b) => (b.score || 0) - (a.score || 0));
+  const matchTotal = sorted.length;
+  const safeSize = Math.min(MAX_MATCH_PAGE_SIZE, Math.max(5, pageSize));
+  const maxPage = matchTotal ? Math.ceil(matchTotal / safeSize) - 1 : 0;
+  const safePage = Math.min(Math.max(0, page), maxPage);
+  const start = safePage * safeSize;
+  const pageRows = sorted.slice(start, start + safeSize);
+
   const [candidateSnaps, resumeSnaps, introSnaps] = await Promise.all([
-    phones.length ? firestore.getAll(...phones.map((p) => firestore.collection("whatsappCandidates").doc(p))) : [],
-    phones.length ? firestore.getAll(...phones.map((p) => firestore.collection("whatsappResumes").doc(p))) : [],
-    matches.length ? firestore.getAll(...matches.map((m) => firestore.collection(INTROS).doc(introId(jobId, m.matchId)))) : [],
+    getAllChunked(
+      firestore,
+      pageRows.map((m) => firestore.collection("whatsappCandidates").doc(m.phone))
+    ),
+    getAllChunked(
+      firestore,
+      pageRows.map((m) => firestore.collection("whatsappResumes").doc(m.phone))
+    ),
+    getAllChunked(
+      firestore,
+      pageRows.map((m) => firestore.collection(INTROS).doc(introId(jobId, m.matchId)))
+    ),
   ]);
 
   return {
     jobId,
     job: job.parsed,
     poolSize: job.poolSize,
-    matches: matches.map((m, i) => {
+    matchTotal,
+    page: safePage,
+    pageSize: safeSize,
+    pageCount: Math.max(1, Math.ceil(matchTotal / safeSize)),
+    matches: pageRows.map((m, i) => {
       const candidate = candidateSnaps[i]?.data() || {};
       const intro = introSnaps[i]?.exists ? introSnaps[i].data() : null;
       return {
@@ -380,6 +359,7 @@ export async function buildJobView(jobId, job) {
         reasons: m.reasons || [],
         gaps: m.gaps || [],
         matchedSkills: m.matchedSkills || [],
+        rank: start + i + 1,
         paused: candidate.jobSeekingStatus === "not_looking",
         ...profileView(candidate),
         contact: contactView(m.phone, candidate, resumeSnaps[i]?.data()),
@@ -408,8 +388,9 @@ async function loadAuthorizedJob(body) {
 
 export async function handleGetJob(body) {
   const { jobId, job } = await loadAuthorizedJob(body);
+  const { page, pageSize } = parseMatchPage(body);
   return {
-    ...(await buildJobView(jobId, job)),
+    ...(await buildJobView(jobId, job, { page, pageSize })),
     recruiter: { companyName: job.companyName, contactName: job.contactName, email: job.email },
   };
 }
@@ -418,7 +399,7 @@ export async function handleGetJob(body) {
 export async function handleReachOut(body) {
   if (!process.env.META_MATCH_TEMPLATE_NAME) {
     throw new Error(
-      "Recruiter reach-out requires META_MATCH_TEMPLATE_NAME (your approved WhatsApp template, e.g. openworldx_recruiter_interest)."
+      "Recruiter reach-out requires META_MATCH_TEMPLATE_NAME (your approved WhatsApp template, e.g. openworldx_recruiter_request_u1)."
     );
   }
   const { jobId, job } = await loadAuthorizedJob(body);

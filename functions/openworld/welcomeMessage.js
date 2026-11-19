@@ -17,16 +17,13 @@ export function buildResumeUploadUrl(phone) {
   return url.toString();
 }
 
-export function welcomeBodyText(name, phone) {
+export function welcomeBodyText(name) {
   const hi = name ? `Hi ${name.split(" ")[0]}! ` : "Hi! ";
-  const uploadLine = phone
-    ? `\n\nUpload your resume (PDF) here if you prefer the website:\n${buildResumeUploadUrl(phone)}`
-    : "";
   return (
     `${hi}I'm Mira on OpenWorldX — I help you find jobs that fit you.\n\n` +
     `Step 1: Send me your resume as a PDF right here in this chat 📄\n` +
     `Step 2: Chat with me so I understand your skills, goals, and what roles you want.\n\n` +
-    `Then I'll suggest jobs that actually fit you.${uploadLine}`
+    `Then I'll suggest jobs that actually fit you.`
   );
 }
 
@@ -34,12 +31,19 @@ const CHAT_HINT = "Or just send your resume PDF right here in this chat 📄";
 
 /** What the user saw, for chat history. The original template's body is known; others are summarized. */
 function templateHistoryText(templateName, name) {
-  if (templateName === "openworldx_mira_start") {
+  if (templateName === "openworldx_mira_start" || templateName === "openworldx_profile_setup_u1") {
+    const first = name?.split(" ")[0] || "there";
     return (
-      `Hi ${name?.split(" ")[0] || "there"}, I'm Mira. I help you find jobs that fit you. ` +
-      `Step 1: Upload your resume (PDF) using the button below. ` +
-      `Step 2: Chat with me here so I understand your skills and goals. ` +
-      `Then I'll suggest the right jobs for you.\n[Upload Resume]`
+      `Hi ${first}, your OpenWorldX job profile setup is ready. ` +
+      `Send your resume (PDF) in this chat or use the upload button. ` +
+      `This helps match you with recruiter requests.\n[Upload resume]`
+    );
+  }
+  if (templateName === "openworldx_mira_welcome_v2") {
+    const first = name?.split(" ")[0] || "there";
+    return (
+      `Hi ${first}, I'm Mira from OpenWorldX. Send your resume PDF in chat or use Upload on website. ` +
+      `Recruiters on OpenWorldX can see your profile when you opt in.\n[Upload on website]`
     );
   }
   return `[Welcome message: introduced Mira and asked them to send their resume PDF in this chat]`;
@@ -63,7 +67,7 @@ function welcomeTemplate(name, phone) {
  */
 export async function sendMetaResumeWelcome(phone, name, phoneNumberId, candidate = {}) {
   const template = welcomeTemplate(name, phone);
-  const text = welcomeBodyText(name, phone);
+  const text = welcomeBodyText(name);
   const inWindow = inServiceWindow(candidate);
 
   const delivery = await sendProactive(phone, candidate, {

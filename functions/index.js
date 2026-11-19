@@ -154,15 +154,15 @@ function resolveHireAction(req, body) {
 
 function cleanAction(value) {
   const action = String(value || "").trim().toLowerCase();
-  return ["match", "job", "reach-out", "intro"].includes(action) ? action : "";
+  return ["match", "job", "reach-out", "intro", "parse-jd"].includes(action) ? action : "";
 }
 
 export const hireApi = onRequest(
   {
     cors: true,
     invoker: "public",
-    timeoutSeconds: 120,
-    memory: "512MiB",
+    timeoutSeconds: 300,
+    memory: "1GiB",
   },
   async (req, res) => {
     if (req.method === "OPTIONS") {
@@ -177,12 +177,14 @@ export const hireApi = onRequest(
     let action = "match";
     try {
       const body = parseRequestBody(req);
-      const { handleHireMatch, handleGetJob, handleReachOut } = await import("./openworld/hireMatch.js");
+      const { handleHireMatch, handleGetJob, handleReachOut, handleParseJob } = await import("./openworld/hireMatch.js");
       action = resolveHireAction(req, body);
       const ip = String(req.get("x-forwarded-for") || req.ip || "").split(",")[0].trim();
       const result =
         action === "job"
           ? await handleGetJob(body)
+          : action === "parse-jd"
+            ? await handleParseJob(body)
           : action === "reach-out" || action === "intro"
             ? await handleReachOut(body)
             : await handleHireMatch(body, { ip, userAgent: req.get("user-agent") || "" });

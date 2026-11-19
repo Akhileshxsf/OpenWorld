@@ -48,9 +48,9 @@ import {
   scrollViewport,
 } from "./landingUi";
 
-const WHATSAPP_HREF = import.meta.env.VITE_WHATSAPP_NUMBER
-  ? `https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira")}`
-  : null;
+import { miraWhatsAppHref } from "../../constants/miraWhatsApp.js";
+
+const WHATSAPP_HREF = miraWhatsAppHref();
 
 const COMPANY_CONTACT_MAIL = "mailto:noreply@openworldx.com?subject=OpenWorldX%20%E2%80%94%20Hiring%20%2F%20Campus%20partnership";
 

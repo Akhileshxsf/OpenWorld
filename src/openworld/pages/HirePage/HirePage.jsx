@@ -39,7 +39,7 @@ const SEARCH_STEPS = [
 const IN_PROGRESS = ["pending_offer", "awaiting_candidate", "collecting_info", "finalizing"];
 const RETRYABLE = ["undeliverable", "expired"];
 const MIRA_QUESTION_PLACEHOLDER = "Mira will ask them and mail you the details";
-const PAGE_SIZE = 4;
+const MATCH_PAGE_SIZE = 5;
 
 const c = {
   page: "#F8FAFC",
@@ -75,6 +75,14 @@ function bytesToBase64(bytes) {
   return btoa(binary);
 }
 
+function friendlyApiError(message) {
+  const m = String(message || "");
+  if (/unterminated string in json/i.test(m) || /invalid json from model/i.test(m)) {
+    return "Search hit a temporary AI glitch. Please try Search talent pool again.";
+  }
+  return m || "Something went wrong. Please try again.";
+}
+
 async function postJson(path, body) {
   const response = await fetch(apiUrl(path), {
     method: "POST",
@@ -82,7 +90,7 @@ async function postJson(path, body) {
     body: JSON.stringify(body),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || "Something went wrong. Please try again.");
+  if (!response.ok) throw new Error(friendlyApiError(data.error));
   return data;
 }
 
@@ -104,7 +112,8 @@ function saveJobInUrl(jobId, key) {
 function scoreTone(score) {
   if (score >= 80) return { label: "Strong match", color: c.green, bg: c.greenSubtle };
   if (score >= 60) return { label: "Good match", color: c.brand, bg: c.brandSubtle };
-  return { label: "Partial match", color: c.amber, bg: c.amberSubtle };
+  if (score >= 30) return { label: "Partial match", color: c.amber, bg: c.amberSubtle };
+  return { label: "Low fit", color: c.textMuted, bg: c.muted };
 }
 
 function resumeFileName(name) {
@@ -191,6 +200,10 @@ const TONES = {
 };
 
 const css = `
+#hp-root input:not([type="file"]), #hp-root textarea {
+  color: ${c.text};
+  background-color: #fff;
+}
 .hp-glass {
   background: rgba(255, 255, 255, 0.58);
   backdrop-filter: blur(18px) saturate(160%);
@@ -211,6 +224,53 @@ const css = `
 .hp-textarea.hp-small { min-height: 110px; font-size: 14.5px; }
 #hp-root svg { flex-shrink: 0; }
 .hp-input::placeholder, .hp-textarea::placeholder { color: #94A3B8; opacity: 1; }
+.hp-jd-review {
+  margin-top: 16px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid ${c.border};
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+.hp-jd-review .hp-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: ${c.textSecondary};
+}
+.hp-jd-review .hp-input {
+  background: #ffffff;
+  color: ${c.text};
+  -webkit-text-fill-color: ${c.text};
+}
+.hp-skill-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #fff;
+  color: ${c.text};
+  border: 1px solid ${c.borderStrong};
+}
+.hp-skill-chip button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0 0 0 2px;
+  line-height: 1;
+  font-size: 16px;
+  color: ${c.textMuted};
+}
+.hp-skill-chip button:hover { color: ${c.text}; }
+.hp-skill-chip.hp-skill-muted {
+  background: ${c.muted};
+  color: ${c.textSecondary};
+  font-weight: 500;
+}
 .hp-row { display: grid; grid-template-columns: 1fr; gap: 14px; }
 .hp-facts { display: grid; grid-template-columns: 1fr; gap: 10px 20px; }
 .hp-dl { display: grid; grid-template-columns: 1fr; gap: 10px 24px; }
@@ -232,6 +292,14 @@ const css = `
 .hp-candidate-row { width: 100%; text-align: left; padding: 14px 16px; border-radius: 16px; border: 1px solid transparent; background: rgba(255,255,255,0.35); cursor: pointer; transition: background 0.15s, border-color 0.15s, box-shadow 0.15s; }
 .hp-candidate-row:hover { background: rgba(255,255,255,0.62); border-color: rgba(191, 219, 254, 0.9); }
 .hp-candidate-row.hp-selected { background: rgba(255,255,255,0.88); border-color: ${c.brandBorder}; box-shadow: 0 4px 20px rgba(37, 99, 235, 0.12); }
+.hp-candidate-list { display: flex; flex-direction: column; gap: 8; }
+.hp-candidate-list.hp-loading { opacity: 0.55; pointer-events: none; }
+.hp-score-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.hp-fit-box { margin-top: 12px; padding: 12px 14px; border-radius: 12px; background: #fff; border: 1px solid ${c.border}; }
+.hp-fit-box h4 { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: ${c.textMuted}; }
+.hp-fit-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.hp-fit-list li { display: flex; gap: 8px; font-size: 13.5px; line-height: 1.5; color: ${c.text}; }
+.hp-row-rank { font-size: 11px; font-weight: 700; color: ${c.textMuted}; min-width: 22px; text-align: right; padding-top: 2px; }
 .hp-pagination { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(226, 232, 240, 0.8); flex-wrap: wrap; }
 .hp-page-btn { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid rgba(203, 213, 225, 0.95); background: rgba(255,255,255,0.65); font: inherit; font-size: 14px; font-weight: 600; color: ${c.textSecondary}; cursor: pointer; }
 .hp-page-btn:hover:not(:disabled) { border-color: ${c.brandBorder}; color: ${c.brand}; background: rgba(239, 246, 255, 0.9); }
@@ -243,7 +311,7 @@ const css = `
   .hp-dl { grid-template-columns: 1fr 1fr; }
 }
 @media (min-width: 960px) {
-  .hp-list-detail { grid-template-columns: minmax(220px, 260px) 1fr; align-items: start; }
+  .hp-list-detail { grid-template-columns: minmax(280px, 340px) 1fr; align-items: start; }
 }
 @keyframes hp-spin { to { transform: rotate(360deg); } }
 `;
@@ -415,6 +483,126 @@ const HOW_IT_WORKS = [
   { n: "3", title: "Reach out via Mira", body: "She asks them on WhatsApp and emails you the answers." },
 ];
 
+const splitSkills = (text) =>
+  String(text || "")
+    .split(/[,;\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const SkillEditor = ({ label, hint, skills, onChange, mutedChips = false }) => {
+  const [draft, setDraft] = useState("");
+  const add = () => {
+    const next = splitSkills(draft);
+    if (!next.length) return;
+    onChange([...new Set([...(skills || []), ...next])]);
+    setDraft("");
+  };
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 14, fontWeight: 600, color: c.textSecondary }}>{label}</span>
+        {hint && <span style={{ fontSize: 12, color: c.textMuted }}>{hint}</span>}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
+        {(skills || []).map((skill) => (
+          <span key={skill} className={`hp-skill-chip${mutedChips ? " hp-skill-muted" : ""}`}>
+            {skill}
+            <button type="button" aria-label={`Remove ${skill}`} onClick={() => onChange((skills || []).filter((s) => s !== skill))}>
+              ×
+            </button>
+          </span>
+        ))}
+        {!skills?.length && <span style={{ fontSize: 13, color: c.textMuted }}>None yet — add below.</span>}
+      </div>
+      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+        <input
+          className="hp-input"
+          style={{ margin: 0, flex: 1 }}
+          value={draft}
+          placeholder="e.g. Python, React"
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add();
+            }
+          }}
+        />
+        <button type="button" className="hp-ghost" style={{ height: 46, padding: "0 14px", flexShrink: 0, background: "#fff" }} onClick={add}>
+          Add
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const JdReviewPanel = ({ parsed, onChange }) => (
+  <div className="hp-jd-review" style={{ marginTop: 0 }}>
+    <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: c.text }}>Check role requirements</h3>
+    <p style={{ margin: "6px 0 16px", fontSize: 13.5, color: c.textMuted, lineHeight: 1.55 }}>
+      We use this to search candidates. Remove wrong skills, add any we missed.
+    </p>
+    {parsed.summary && (
+      <p
+        style={{
+          margin: "0 0 16px",
+          padding: "10px 12px",
+          borderRadius: 10,
+          background: c.muted,
+          border: `1px solid ${c.border}`,
+          fontSize: 13.5,
+          lineHeight: 1.55,
+          color: c.text,
+        }}
+      >
+        {parsed.summary}
+      </p>
+    )}
+    <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
+      <label>
+        <span className="hp-field-label">Role title</span>
+        <input className="hp-input" value={parsed.title || ""} onChange={(e) => onChange({ ...parsed, title: e.target.value })} />
+      </label>
+      <label>
+        <span className="hp-field-label">Location</span>
+        <input className="hp-input" value={parsed.location || ""} onChange={(e) => onChange({ ...parsed, location: e.target.value })} />
+      </label>
+      <label>
+        <span className="hp-field-label">Min years</span>
+        <input
+          className="hp-input"
+          type="number"
+          min={0}
+          value={parsed.experienceMin ?? ""}
+          onChange={(e) => onChange({ ...parsed, experienceMin: e.target.value === "" ? null : Number(e.target.value) })}
+        />
+      </label>
+      <label>
+        <span className="hp-field-label">Max years</span>
+        <input
+          className="hp-input"
+          type="number"
+          min={0}
+          value={parsed.experienceMax ?? ""}
+          onChange={(e) => onChange({ ...parsed, experienceMax: e.target.value === "" ? null : Number(e.target.value) })}
+        />
+      </label>
+    </div>
+    <SkillEditor
+      label="Must-have skills"
+      hint="Up to ~12"
+      skills={parsed.mustHaveSkills}
+      onChange={(mustHaveSkills) => onChange({ ...parsed, mustHaveSkills })}
+    />
+    <SkillEditor
+      label="Nice-to-have (optional)"
+      mutedChips
+      skills={parsed.niceToHaveSkills}
+      onChange={(niceToHaveSkills) => onChange({ ...parsed, niceToHaveSkills })}
+    />
+  </div>
+);
+
 const JobSummary = ({ job, poolSize, matchCount, resultsLink, onNewSearch }) => {
   const [copied, setCopied] = useState(false);
   const [more, setMore] = useState(false);
@@ -436,7 +624,7 @@ const JobSummary = ({ job, poolSize, matchCount, resultsLink, onNewSearch }) => 
         <div style={{ minWidth: 0, flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, lineHeight: 1.3 }}>{job.title}</h2>
           <p style={{ margin: "4px 0 0", fontSize: 13, color: c.textMuted }}>
-            {matchCount} match{matchCount === 1 ? "" : "es"} · {poolSize} profiles
+            {matchCount} match{matchCount === 1 ? "" : "es"} · sorted by fit score · {poolSize} in pool
             {job.location ? ` · ${job.location}` : ""}
             {job.experienceMin != null ? ` · ${job.experienceMin}${job.experienceMax != null ? `–${job.experienceMax}` : "+"} yrs` : ""}
           </p>
@@ -663,33 +851,23 @@ function introBadge(intro) {
   return { label: intro.status.replace(/_/g, " "), color: c.textMuted, bg: c.muted };
 }
 
-const Pagination = ({ page, pageCount, total, onPage }) => {
+const Pagination = ({ page, pageCount, total, pageSize, onPage }) => {
   if (pageCount <= 1) return null;
-  const from = page * PAGE_SIZE + 1;
-  const to = Math.min(total, (page + 1) * PAGE_SIZE);
-  const pages = Array.from({ length: pageCount }, (_, i) => i);
+  const from = page * pageSize + 1;
+  const to = Math.min(total, (page + 1) * pageSize);
 
   return (
     <nav className="hp-pagination" aria-label="Candidate pages">
       <span style={{ fontSize: 13.5, color: c.textMuted }}>
-        Showing {from}–{to} of {total}
+        {from}–{to} of {total}
       </span>
       <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
         <button type="button" className="hp-page-btn" disabled={page === 0} onClick={() => onPage(page - 1)} aria-label="Previous page">
           <ChevronLeft size={18} aria-hidden />
         </button>
-        {pages.map((i) => (
-          <button
-            key={i}
-            type="button"
-            className={`hp-page-btn${i === page ? " hp-page-active" : ""}`}
-            onClick={() => onPage(i)}
-            aria-label={`Page ${i + 1}`}
-            aria-current={i === page ? "page" : undefined}
-          >
-            {i + 1}
-          </button>
-        ))}
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: c.textSecondary, padding: "0 4px" }}>
+          Page {page + 1} / {pageCount}
+        </span>
         <button type="button" className="hp-page-btn" disabled={page >= pageCount - 1} onClick={() => onPage(page + 1)} aria-label="Next page">
           <ChevronRight size={18} aria-hidden />
         </button>
@@ -698,26 +876,65 @@ const Pagination = ({ page, pageCount, total, onPage }) => {
   );
 };
 
-const CompactMatchRow = ({ match, selected, onSelect }) => {
+const FitSummary = ({ reasons, gaps }) => {
+  if (!reasons?.length && !gaps?.length) return null;
+  return (
+    <div className="hp-fit-box">
+      {reasons?.length > 0 && (
+        <>
+          <h4>Why they fit</h4>
+          <ul className="hp-fit-list">
+            {reasons.map((reason) => (
+              <li key={reason}>
+                <CheckCircle2 size={15} color={c.green} style={{ marginTop: 3, flexShrink: 0 }} aria-hidden />
+                <span>{reason}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {gaps?.length > 0 && (
+        <>
+          <h4 style={{ marginTop: reasons?.length ? 12 : 0 }}>Gaps</h4>
+          <ul className="hp-fit-list">
+            {gaps.map((gap) => (
+              <li key={gap} style={{ color: c.textSecondary }}>
+                <AlertCircle size={15} color={c.amber} style={{ marginTop: 3, flexShrink: 0 }} aria-hidden />
+                <span>{gap}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+};
+
+const CompactMatchRow = ({ match, rank, selected, onSelect }) => {
   const name = match.contact?.name || "Candidate";
   const tone = scoreTone(match.score);
   const badge = introBadge(match.intro);
   const initial = name.charAt(0).toUpperCase();
+  const reasonPreview = match.reasons?.[0] || match.headline || "";
 
   return (
     <button type="button" className={`hp-candidate-row${selected ? " hp-selected" : ""}`} onClick={() => onSelect(match.matchId)}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <span className="hp-row-rank" aria-hidden>
+          #{rank}
+        </span>
         <div
           aria-hidden
           style={{
-            width: 40,
-            height: 40,
-            borderRadius: 12,
-            background: "rgba(239, 246, 255, 0.95)",
-            color: c.brand,
+            width: 36,
+            height: 36,
+            borderRadius: 10,
+            background: tone.bg,
+            color: tone.color,
             display: "grid",
             placeItems: "center",
             fontWeight: 800,
+            fontSize: 14,
             flexShrink: 0,
           }}
         >
@@ -725,14 +942,21 @@ const CompactMatchRow = ({ match, selected, onSelect }) => {
         </div>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-            <span style={{ fontWeight: 700, fontSize: 15, lineHeight: 1.3, textAlign: "left" }}>{name}</span>
-            <span style={{ fontWeight: 800, fontSize: 14, color: tone.color, flexShrink: 0 }}>{match.score}%</span>
+            <span style={{ fontWeight: 700, fontSize: 14.5, lineHeight: 1.3, textAlign: "left" }}>{name}</span>
+            <span className="hp-score-pill" style={{ background: tone.bg, color: tone.color }}>
+              {match.score}%
+            </span>
           </div>
-          {match.headline && (
-            <p className="hp-clamp-2" style={{ margin: "4px 0 0", fontSize: 12.5, color: c.textMuted, lineHeight: 1.45, textAlign: "left" }}>{match.headline}</p>
+          <span style={{ display: "inline-block", marginTop: 4, fontSize: 11.5, fontWeight: 600, color: tone.color }}>
+            {tone.label}
+          </span>
+          {reasonPreview && (
+            <p className="hp-clamp-2" style={{ margin: "5px 0 0", fontSize: 12.5, color: c.textSecondary, lineHeight: 1.45, textAlign: "left" }}>
+              {reasonPreview}
+            </p>
           )}
           {badge && (
-            <span style={{ ...s.chip, marginTop: 8, height: 24, fontSize: 11.5, background: badge.bg, color: badge.color, border: "none" }}>{badge.label}</span>
+            <span style={{ ...s.chip, marginTop: 6, height: 22, fontSize: 11, background: badge.bg, color: badge.color, border: "none" }}>{badge.label}</span>
           )}
         </div>
       </div>
@@ -740,42 +964,47 @@ const CompactMatchRow = ({ match, selected, onSelect }) => {
   );
 };
 
-const ResultsPanel = ({ result, resultsLink, onNewSearch, onReachOut }) => {
-  const [page, setPage] = useState(0);
+const ResultsPanel = ({ result, resultsLink, onNewSearch, onReachOut, onPageChange, listLoading }) => {
   const [selectedId, setSelectedId] = useState(null);
   const matches = result.matches || [];
-  const pageCount = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount - 1);
-  const pageMatches = matches.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const matchTotal = result.matchTotal ?? matches.length;
+  const page = result.page ?? 0;
+  const pageSize = result.pageSize ?? MATCH_PAGE_SIZE;
+  const pageCount = result.pageCount ?? Math.max(1, Math.ceil(matchTotal / pageSize));
 
   useEffect(() => {
-    setPage(0);
-  }, [result.jobId]);
-
-  useEffect(() => {
-    if (!pageMatches.length) {
+    if (!matches.length) {
       setSelectedId(null);
       return;
     }
-    if (!pageMatches.some((m) => m.matchId === selectedId)) {
-      setSelectedId(pageMatches[0].matchId);
+    if (!matches.some((m) => m.matchId === selectedId)) {
+      setSelectedId(matches[0].matchId);
     }
-  }, [safePage, matches, pageMatches, selectedId]);
+  }, [matches, selectedId]);
 
-  const selected = matches.find((m) => m.matchId === selectedId) || pageMatches[0];
+  const selected = matches.find((m) => m.matchId === selectedId) || matches[0];
 
   return (
     <div className="hp-results-shell">
-      <JobSummary job={result.job} poolSize={result.poolSize} matchCount={matches.length} resultsLink={resultsLink} onNewSearch={onNewSearch} />
+      <JobSummary job={result.job} poolSize={result.poolSize} matchCount={matchTotal} resultsLink={resultsLink} onNewSearch={onNewSearch} />
       <div className="hp-list-detail">
-        <div className="hp-glass" style={{ ...s.card, marginTop: 0, padding: 12 }}>
-          <p style={{ ...s.sectionTitle, marginBottom: 8, fontSize: 13 }}>Candidates</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {pageMatches.map((match) => (
-              <CompactMatchRow key={match.matchId} match={match} selected={match.matchId === selectedId} onSelect={setSelectedId} />
+        <div className="hp-glass" style={{ ...s.card, marginTop: 0, padding: "12px 14px", background: "#fff" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
+            <p style={{ ...s.sectionTitle, margin: 0, fontSize: 13 }}>All matches</p>
+            <span style={{ fontSize: 12, color: c.textMuted }}>Sorted by score</span>
+          </div>
+          <div className={`hp-candidate-list${listLoading ? " hp-loading" : ""}`} role="listbox" aria-label="Candidates sorted by fit score" aria-busy={listLoading}>
+            {matches.map((match) => (
+              <CompactMatchRow
+                key={match.matchId}
+                rank={match.rank ?? match.score}
+                match={match}
+                selected={match.matchId === selectedId}
+                onSelect={setSelectedId}
+              />
             ))}
           </div>
-          <Pagination page={safePage} pageCount={pageCount} total={matches.length} onPage={setPage} />
+          <Pagination page={page} pageCount={pageCount} total={matchTotal} pageSize={pageSize} onPage={onPageChange} />
         </div>
         <div style={{ minWidth: 0 }}>
           {selected ? (
@@ -808,15 +1037,9 @@ const MatchCard = ({ match, onReachOut }) => {
   ].filter((row) => row.value);
   const reasons = match.reasons || [];
   const gaps = match.gaps || [];
-  const previewReasons = showMore ? reasons : reasons.slice(0, 2);
-  const previewGaps = showMore ? gaps : gaps.slice(0, 1);
-  const hiddenReasons = !showMore && reasons.length > 2;
-  const hiddenGaps = !showMore && gaps.length > 1;
-  const previewSkills = showMore ? skills : skills.slice(0, 8);
+  const previewSkills = showMore ? skills : skills.slice(0, 10);
   const hasExtraProfile =
-    reasons.length > 2 ||
-    gaps.length > 1 ||
-    skills.length > 8 ||
+    skills.length > 10 ||
     Boolean(match.summary) ||
     preferences.length > 0 ||
     (match.companies?.length > 0) ||
@@ -837,7 +1060,9 @@ const MatchCard = ({ match, onReachOut }) => {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
               <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, lineHeight: 1.25 }}>{name}</h3>
-              <span style={{ fontWeight: 800, fontSize: 14, color: tone.color }}>{match.score}% · {tone.label}</span>
+              <span className="hp-score-pill" style={{ background: tone.bg, color: tone.color, fontSize: 13 }}>
+                {match.score}% · {tone.label}
+              </span>
             </div>
             {match.headline && (
               <p className={showMore ? undefined : "hp-clamp-2"} style={{ margin: "4px 0 0", fontSize: 13.5, color: c.textSecondary, lineHeight: 1.45 }}>
@@ -855,22 +1080,7 @@ const MatchCard = ({ match, onReachOut }) => {
           <ContactStrip contact={match.contact || {}} name={name} compact />
         </div>
 
-        {(previewReasons.length > 0 || previewGaps.length > 0) && (
-          <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 6 }}>
-            {previewReasons.map((reason) => (
-              <li key={reason} style={{ display: "flex", gap: 6, fontSize: 13, lineHeight: 1.45 }}>
-                <CheckCircle2 size={14} color={c.green} style={{ marginTop: 2, flexShrink: 0 }} aria-hidden />
-                <span>{reason}</span>
-              </li>
-            ))}
-            {previewGaps.map((gap) => (
-              <li key={gap} style={{ display: "flex", gap: 6, fontSize: 13, lineHeight: 1.45, color: c.textMuted }}>
-                <AlertCircle size={14} color={c.amber} style={{ marginTop: 2, flexShrink: 0 }} aria-hidden />
-                <span>{gap}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <FitSummary reasons={reasons} gaps={gaps} />
 
         {previewSkills.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 10 }}>
@@ -879,15 +1089,13 @@ const MatchCard = ({ match, onReachOut }) => {
                 {skill}
               </span>
             ))}
-            {!showMore && skills.length > 8 && (
-              <span style={{ ...s.chip, height: 24, fontSize: 11.5, color: c.textMuted }}>+{skills.length - 8}</span>
+            {!showMore && skills.length > 10 && (
+              <span style={{ ...s.chip, height: 24, fontSize: 11.5, color: c.textMuted }}>+{skills.length - 10}</span>
             )}
           </div>
         )}
 
-        {(hasExtraProfile || hiddenReasons || hiddenGaps) && (
-          <MoreToggle open={showMore} onToggle={() => setShowMore((v) => !v)} label="…more" />
-        )}
+        {hasExtraProfile && <MoreToggle open={showMore} onToggle={() => setShowMore((v) => !v)} label="Full profile" />}
 
         {showMore && (
           <div style={{ marginTop: 4 }}>
@@ -968,16 +1176,43 @@ const HirePage = () => {
   const [access, setAccess] = useState(readSavedJob);
   const [loadingSaved, setLoadingSaved] = useState(Boolean(access));
   const [showForm, setShowForm] = useState(!readSavedJob());
+  const [jdReview, setJdReview] = useState(null);
+  const [jdPayload, setJdPayload] = useState(null);
   const accessRef = useRef(access);
   accessRef.current = access;
+  const listPageRef = useRef(0);
+  const [listLoading, setListLoading] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const fetchJob = useCallback(async (page = 0) => {
     const current = accessRef.current;
     if (!current) return null;
-    const data = await postJson("job", { jobId: current.jobId, key: current.key });
+    listPageRef.current = page;
+    const data = await postJson("job", {
+      jobId: current.jobId,
+      key: current.key,
+      page,
+      pageSize: MATCH_PAGE_SIZE,
+    });
     setResult(data);
     return data;
   }, []);
+
+  const refresh = useCallback(async () => fetchJob(listPageRef.current), [fetchJob]);
+
+  const onResultsPage = useCallback(
+    async (page) => {
+      setListLoading(true);
+      setError("");
+      try {
+        await fetchJob(page);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setListLoading(false);
+      }
+    },
+    [fetchJob]
+  );
 
   useEffect(() => {
     if (!access || result) return;
@@ -1043,26 +1278,56 @@ const HirePage = () => {
   };
 
   const hasJd = mode === "upload" ? Boolean(file) : jdText.trim().length > 0;
-  const canSubmit = hasJd && form.companyName.trim() && form.contactName.trim() && form.email.trim() && !searching;
+  const formOk = form.companyName.trim() && form.contactName.trim() && form.email.trim();
+  const canSubmit = formOk && (jdReview || hasJd) && !searching;
+
+  const buildJdPayload = () =>
+    mode === "upload"
+      ? { ...form, fileName: file.name, fileBase64: bytesToBase64(file.bytes) }
+      : { ...form, jdText };
 
   const onSubmit = async (e) => {
     e.preventDefault();
     if (!canSubmit) return;
     setError("");
+
+    if (jdReview && jdPayload) {
+      if (!(jdReview.mustHaveSkills || []).length) {
+        setError("Add at least one must-have skill.");
+        return;
+      }
+      setSearching(true);
+      setResult(null);
+      try {
+        const { accessKey, ...data } = await postJson("match", { ...jdPayload, parsed: jdReview });
+        const saved = { jobId: data.jobId, key: accessKey };
+        setAccess(saved);
+        saveJobInUrl(saved.jobId, saved.key);
+        listPageRef.current = 0;
+        setResult(data);
+        setJdReview(null);
+        setJdPayload(null);
+        setShowForm(false);
+        requestAnimationFrame(() => document.getElementById("hp-results")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setSearching(false);
+      }
+      return;
+    }
+
     setSearching(true);
-    setResult(null);
     try {
-      const payload =
-        mode === "upload"
-          ? { ...form, fileName: file.name, fileBase64: bytesToBase64(file.bytes) }
-          : { ...form, jdText };
-      const { accessKey, ...data } = await postJson("match", payload);
-      const saved = { jobId: data.jobId, key: accessKey };
-      setAccess(saved);
-      saveJobInUrl(saved.jobId, saved.key);
-      setResult(data);
-      setShowForm(false);
-      requestAnimationFrame(() => document.getElementById("hp-results")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      const payload = buildJdPayload();
+      const { parsed } = await postJson("parse-jd", payload);
+      setJdPayload(payload);
+      setJdReview({
+        ...parsed,
+        mustHaveSkills: (parsed.mustHaveSkills || []).slice(0, 12),
+        niceToHaveSkills: (parsed.niceToHaveSkills || []).slice(0, 10),
+      });
+      setStepLabel("Review requirements, then run search");
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1197,6 +1462,10 @@ const HirePage = () => {
                 />
               )}
 
+              {jdReview && (
+                <JdReviewPanel parsed={jdReview} onChange={setJdReview} />
+              )}
+
               {error && (
                 <div role="alert" style={s.error}>
                   <AlertCircle size={17} style={{ marginTop: 1 }} aria-hidden />
@@ -1204,9 +1473,29 @@ const HirePage = () => {
                 </div>
               )}
 
+              {jdReview && (
+                <button
+                  type="button"
+                  className="hp-ghost"
+                  style={{ marginTop: 12, width: "100%", height: 38 }}
+                  onClick={() => {
+                    setJdReview(null);
+                    setJdPayload(null);
+                  }}
+                >
+                  Edit job description
+                </button>
+              )}
+
               <button type="submit" disabled={!canSubmit} aria-busy={searching} style={{ ...s.submit, ...(canSubmit || searching ? null : { background: "#BFDBFE", color: c.textMuted, cursor: "not-allowed" }) }}>
                 {searching ? <span style={s.spinner} aria-hidden /> : <Sparkles size={18} aria-hidden />}
-                {searching ? stepLabel : result ? "Search again" : "Find matching candidates"}
+                {searching
+                  ? stepLabel
+                  : jdReview
+                    ? "Search talent pool"
+                    : result
+                      ? "Search again"
+                      : "Read job description"}
               </button>
               <p style={{ margin: "12px 0 0", fontSize: 13, color: c.textMuted, textAlign: "center" }}>
                 Please use candidate details only to discuss this role with them.
@@ -1216,10 +1505,12 @@ const HirePage = () => {
 
           {result && (
             <section id="hp-results" style={{ scrollMarginTop: 80, marginTop: showForm ? 28 : 0 }}>
-              {result.matches.length > 0 ? (
+              {(result.matchTotal ?? result.matches.length) > 0 ? (
                 <ResultsPanel
                   result={result}
                   resultsLink={resultsLink}
+                  listLoading={listLoading}
+                  onPageChange={onResultsPage}
                   onNewSearch={() => {
                     setShowForm(true);
                     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1240,9 +1531,9 @@ const HirePage = () => {
                   />
                   <div className="hp-glass" style={{ ...s.card, textAlign: "center", color: c.textSecondary }}>
                     <Users size={32} color="#94A3B8" aria-hidden />
-                    <p style={{ margin: "10px 0 0", fontSize: 17, fontWeight: 600, color: c.text }}>No strong matches yet</p>
+                    <p style={{ margin: "10px 0 0", fontSize: 17, fontWeight: 600, color: c.text }}>No candidates in the pool yet</p>
                     <p style={{ margin: "6px 0 0", lineHeight: 1.6 }}>
-                      We&apos;ve saved your role. Our team will reach out at {form.email} as matching candidates join.
+                      We&apos;ve saved your role. Our team will reach out at {form.email} as profiles join.
                     </p>
                   </div>
                 </>

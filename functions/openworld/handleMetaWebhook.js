@@ -104,7 +104,7 @@ export async function handleMetaWebhook(rawBody) {
         console.error("chat resume failed", phone, error.message);
         await sendBotText(
           phone,
-          "Sorry, I couldn't open that file 😕 Could you send it again? If it keeps failing, ask me for the upload link.",
+          "Sorry, I couldn't open that file 😕 Could you send your resume again as a PDF?",
           { phoneNumberId: message.phoneNumberId, kind: "resume_failed" }
         ).catch(() => {});
         results.push({ ok: false, phone, error: error.message.slice(0, 200) });

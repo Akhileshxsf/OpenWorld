@@ -54,7 +54,7 @@ export async function handleChatResume(phone, message) {
     return { resume: "rejected", reason: "not_pdf" };
   }
 
-  await reply("Got your resume 📄 Reading it now — give me a few seconds…", "resume_received");
+  await reply("Reading your resume now — give me a few seconds…", "resume_received");
 
   const download = await downloadMetaMedia(media.id, { maxBytes: MAX_RESUME_BYTES });
   if (download.tooLarge) {

@@ -1173,7 +1173,7 @@ const ChatbotPage = () => {
                   <MenuItem
                     icon={<FaWhatsapp />}
                     as="a"
-                    href={`https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira")}`}
+                    href={`https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER).replace(/\D/g, "")}?text=${encodeURIComponent("Hi Mira, find me a job")}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     bg="black"

@@ -3,8 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { LightMode } from "@chakra-ui/react";
 import { AlertCircle, CheckCircle2, FileText, MessageCircle, Paperclip } from "lucide-react";
 
-const MIRA_WHATSAPP_URL = `https://wa.me/${String(import.meta.env.VITE_WHATSAPP_NUMBER || "919877174681").replace(/\D/g, "")}`;
-const NEW_LINK_WHATSAPP_URL = `${MIRA_WHATSAPP_URL}?text=${encodeURIComponent("Send me a new resume upload link")}`;
+import { miraWhatsAppHref } from "../../constants/miraWhatsApp.js";
+
+const MIRA_WHATSAPP_URL = miraWhatsAppHref() || `https://wa.me/919877174681`;
+const NEW_LINK_WHATSAPP_URL = `${miraWhatsAppHref()?.split("?")[0] || "https://wa.me/919877174681"}?text=${encodeURIComponent("Send me a new resume upload link")}`;
 const OUTDATED_LINK_MESSAGE = "This upload link is old or incomplete.";
 const WHATSAPP_REDIRECT_MS = 2000;
 const MAX_BYTES = 8 * 1024 * 1024;
